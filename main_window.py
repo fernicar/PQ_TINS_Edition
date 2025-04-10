@@ -11,7 +11,7 @@ from PySide6.QtWidgets import (
     QLabel, QListView, QProgressBar, QStatusBar, QSizePolicy, QSplitter,
     QFileDialog, QMessageBox
 )
-from PySide6.QtGui import QStandardItemModel, QStandardItem, QIcon, QAction, QFont
+from PySide6.QtGui import QStandardItemModel, QStandardItem, QIcon, QAction, QFont, QPalette
 from PySide6.QtCore import Qt, QTimer, Slot, QPoint, QSettings # Added QSettings
 
 from config_data import (
@@ -664,6 +664,9 @@ if __name__ == "__main__":
     app = QApplication(sys.argv)
     app.setOrganizationName(ORG_NAME)
     app.setApplicationName(APP_NAME)
+    dark_palette = QPalette()
+    dark_palette.setColor(QPalette.ColorRole.WindowText, Qt.GlobalColor.white)
+    app.setPalette(dark_palette)
     app.setStyleSheet(DARK_STYLESHEET)
 
     window = MainWindow()
