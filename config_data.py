@@ -251,7 +251,7 @@ MONSTER_MODS = [
 ]
 
 EQUIPMENT_SLOTS = [
-    "Weapon", "Shield", "Helm", "Hauberk", "Brassairs", "Vambraces",
+    "Weapon", "Shield", "Helm", "Hauberk", "Brassairts", "Vambraces",
     "Gauntlets", "Gambeson", "Cuisses", "Greaves", "Sollerets"
 ]
 

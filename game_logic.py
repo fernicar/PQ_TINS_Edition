@@ -623,7 +623,11 @@ class GameLogic(QObject):
             self.character["Gold"] = max(0, self.character.get("Gold", 0) + quantity)
 
         # Update Inventory dictionary
-        current_qty = self.character["Inventory"].get(item_name, 0)
+        try:
+            current_qty = self.character["Inventory"].get(item_name, 0)
+        except KeyError:
+            print(f"Error: Inventory not initialized. Character data: {self.character}")
+            exit()
         new_qty = max(0, current_qty + quantity)
 
         log_action = "Added" if quantity > 0 else "Removed"
@@ -700,10 +704,77 @@ class GameLogic(QObject):
     def apply_loaded_state(self, loaded_state):
         """Apply a loaded state to the game logic."""
         try:
-            self.character = loaded_state.get("character", {})
-            self.plot_acts = loaded_state.get("plot_acts", ["Prologue"])
-            # Handle old save format where quests might be strings
-            loaded_quests = loaded_state.get("quests", [])
+            # Initialize counters for tracking
+            total_keys = len(loaded_state.keys())
+            connected_values = 0
+            unconnected_keys = []
+
+            # Track all keys in the loaded state
+            all_keys = set(loaded_state.keys())
+
+            # Character data
+            if "character" in loaded_state:
+                self.character = loaded_state.get("character", {})
+                connected_values += 1
+                all_keys.remove("character")
+            elif "Traits" in loaded_state:
+                # Handle fernicar.json format where character data is in Traits
+                traits = loaded_state.get("Traits", {})
+                if not self.character:
+                    self.character = {}
+                self.character["Name"] = traits.get("Name", "Unknown")
+                self.character["Race"] = traits.get("Race", "Human")
+                self.character["Class"] = traits.get("Class", "Fighter")
+                self.character["Level"] = traits.get("Level", 1)
+                connected_values += 1
+                if "Traits" in all_keys:
+                    all_keys.remove("Traits")
+            else:
+                unconnected_keys.append("character/Traits")
+
+            # Stats
+            if "Stats" in loaded_state:
+                if not "Stats" in self.character:
+                    self.character["Stats"] = {}
+                stats = loaded_state.get("Stats", {})
+                for stat_key, stat_value in stats.items():
+                    if stat_key != "seed" and stat_key != "best":
+                        self.character["Stats"][stat_key] = stat_value
+                connected_values += 1
+                all_keys.remove("Stats")
+            else:
+                unconnected_keys.append("Stats")
+
+            # Plot acts
+            if "plot_acts" in loaded_state:
+                self.plot_acts = loaded_state.get("plot_acts", ["Prologue"])
+                connected_values += 1
+                all_keys.remove("plot_acts")
+            elif "act" in loaded_state:
+                # Handle fernicar.json format
+                act_num = loaded_state.get("act", 1)
+                self.plot_acts = [f"Act {i}" for i in range(1, act_num + 1)]
+                connected_values += 1
+                all_keys.remove("act")
+            else:
+                self.plot_acts = ["Prologue"]
+                unconnected_keys.append("plot_acts/act")
+
+            # Quests
+            if "quests" in loaded_state:
+                loaded_quests = loaded_state.get("quests", [])
+                connected_values += 1
+                all_keys.remove("quests")
+            elif "Quests" in loaded_state:
+                # Handle fernicar.json format
+                loaded_quests = loaded_state.get("Quests", [])
+                connected_values += 1
+                all_keys.remove("Quests")
+            else:
+                loaded_quests = []
+                unconnected_keys.append("quests/Quests")
+
+            # Process quests
             self.quests = []
             for q in loaded_quests:
                 if isinstance(q, tuple):
@@ -713,40 +784,299 @@ class GameLogic(QObject):
                     # Safer: mark all loaded string quests as complete.
                     self.quests.append((q, True))
 
+            # Equipment
+            if "Equips" in loaded_state:
+                equips = loaded_state.get("Equips", {})
+                if not "Equipment" in self.character:
+                    self.character["Equipment"] = {}
+                for slot, item in equips.items():
+                    self.character["Equipment"][slot] = item
+                connected_values += 1
+                all_keys.remove("Equips")
+            else:
+                unconnected_keys.append("Equips")
 
-            self.task_description = loaded_state.get("task_description", "Loaded Game")
-            self.task_progress = loaded_state.get("task_progress", 0)
-            self.task_max = loaded_state.get("task_max", 1000)
-            self.xp_progress = loaded_state.get("xp_progress", 0)
-            self.xp_max = loaded_state.get("xp_max", calculate_xp_for_level(self.character.get("Level", 1) + 1))
-            self.quest_description = loaded_state.get("quest_description", "Awaiting orders")
-            self.quest_progress = loaded_state.get("quest_progress", 0)
-            self.quest_max = loaded_state.get("quest_max", 10000)
-            self.plot_progress = loaded_state.get("plot_progress", 0)
-            self.plot_max = loaded_state.get("plot_max", calculate_xp_for_level(len(self.plot_acts) + 1) * 10)
-            self.encumbrance_max = loaded_state.get("encumbrance_max", BASE_ENCUMBRANCE + self.character.get("Stats", {}).get("STR", 10))
-            # Encumbrance itself is calculated dynamically
+            # Inventory
+            if "Inventory" in loaded_state:
+                inventory_items = loaded_state.get("Inventory", [])
+                if not "Inventory" in self.character:
+                    self.character["Inventory"] = {}
+                for item in inventory_items:
+                    if isinstance(item, list) and len(item) == 2:
+                        self.character["Inventory"][item[0]] = item[1]
+                connected_values += 1
+                all_keys.remove("Inventory")
+            else:
+                unconnected_keys.append("Inventory")
 
-            self.task_type = loaded_state.get("task_type", "idle")
-            self.item_being_sold = loaded_state.get("item_being_sold", None)
-            self.current_target_monster = loaded_state.get("current_target_monster", None)
-            self.quest_target_monster = loaded_state.get("quest_target_monster", None)
+            # Spells
+            if "Spells" in loaded_state:
+                spells = loaded_state.get("Spells", [])
+                if not "Spells" in self.character:
+                    self.character["Spells"] = {}
+                for spell in spells:
+                    if isinstance(spell, list) and len(spell) == 2:
+                        self.character["Spells"][spell[0]] = spell[1]
+                connected_values += 1
+                all_keys.remove("Spells")
+            else:
+                unconnected_keys.append("Spells")
 
-            self.game_loaded = loaded_state.get("game_loaded", True) # Assume loaded is true
+            # Task information
+            if "task_description" in loaded_state:
+                self.task_description = loaded_state.get("task_description", "Loaded Game")
+                connected_values += 1
+                all_keys.remove("task_description")
+            elif "kill" in loaded_state:
+                # Handle fernicar.json format
+                self.task_description = loaded_state.get("kill", "Loaded Game")
+                connected_values += 1
+                all_keys.remove("kill")
+            else:
+                self.task_description = "Loaded Game"
+                unconnected_keys.append("task_description/kill")
+
+            # Progress bars
+            if "task_progress" in loaded_state and "task_max" in loaded_state:
+                self.task_progress = loaded_state.get("task_progress", 0)
+                self.task_max = loaded_state.get("task_max", 1000)
+                connected_values += 2
+                all_keys.remove("task_progress")
+                all_keys.remove("task_max")
+            elif "TaskBar" in loaded_state:
+                # Handle fernicar.json format
+                task_bar = loaded_state.get("TaskBar", {})
+                self.task_progress = task_bar.get("position", 0)
+                self.task_max = task_bar.get("max", 1000)
+                connected_values += 1
+                all_keys.remove("TaskBar")
+            else:
+                self.task_progress = 0
+                self.task_max = 1000
+                unconnected_keys.append("task_progress/task_max/TaskBar")
+
+            if "xp_progress" in loaded_state and "xp_max" in loaded_state:
+                self.xp_progress = loaded_state.get("xp_progress", 0)
+                self.xp_max = loaded_state.get("xp_max", calculate_xp_for_level(self.character.get("Level", 1) + 1))
+                connected_values += 2
+                all_keys.remove("xp_progress")
+                all_keys.remove("xp_max")
+            elif "ExpBar" in loaded_state:
+                # Handle fernicar.json format
+                exp_bar = loaded_state.get("ExpBar", {})
+                self.xp_progress = exp_bar.get("position", 0)
+                self.xp_max = exp_bar.get("max", calculate_xp_for_level(self.character.get("Level", 1) + 1))
+                connected_values += 1
+                all_keys.remove("ExpBar")
+            else:
+                self.xp_progress = 0
+                self.xp_max = calculate_xp_for_level(self.character.get("Level", 1) + 1)
+                unconnected_keys.append("xp_progress/xp_max/ExpBar")
+
+            if "quest_description" in loaded_state:
+                self.quest_description = loaded_state.get("quest_description", "Awaiting orders")
+                connected_values += 1
+                all_keys.remove("quest_description")
+            elif "bestquest" in loaded_state:
+                # Handle fernicar.json format
+                self.quest_description = loaded_state.get("bestquest", "Awaiting orders")
+                connected_values += 1
+                all_keys.remove("bestquest")
+            else:
+                self.quest_description = "Awaiting orders"
+                unconnected_keys.append("quest_description/bestquest")
+
+            if "quest_progress" in loaded_state and "quest_max" in loaded_state:
+                self.quest_progress = loaded_state.get("quest_progress", 0)
+                self.quest_max = loaded_state.get("quest_max", 10000)
+                connected_values += 2
+                all_keys.remove("quest_progress")
+                all_keys.remove("quest_max")
+            elif "QuestBar" in loaded_state:
+                # Handle fernicar.json format
+                quest_bar = loaded_state.get("QuestBar", {})
+                self.quest_progress = quest_bar.get("position", 0)
+                self.quest_max = quest_bar.get("max", 10000)
+                connected_values += 1
+                all_keys.remove("QuestBar")
+            else:
+                self.quest_progress = 0
+                self.quest_max = 10000
+                unconnected_keys.append("quest_progress/quest_max/QuestBar")
+
+            if "plot_progress" in loaded_state and "plot_max" in loaded_state:
+                self.plot_progress = loaded_state.get("plot_progress", 0)
+                self.plot_max = loaded_state.get("plot_max", calculate_xp_for_level(len(self.plot_acts) + 1) * 10)
+                connected_values += 2
+                all_keys.remove("plot_progress")
+                all_keys.remove("plot_max")
+            elif "PlotBar" in loaded_state:
+                # Handle fernicar.json format
+                plot_bar = loaded_state.get("PlotBar", {})
+                self.plot_progress = plot_bar.get("position", 0)
+                self.plot_max = plot_bar.get("max", calculate_xp_for_level(len(self.plot_acts) + 1) * 10)
+                connected_values += 1
+                all_keys.remove("PlotBar")
+            else:
+                self.plot_progress = 0
+                self.plot_max = calculate_xp_for_level(len(self.plot_acts) + 1) * 10
+                unconnected_keys.append("plot_progress/plot_max/PlotBar")
+
+            # Encumbrance
+            if "encumbrance_max" in loaded_state:
+                self.encumbrance_max = loaded_state.get("encumbrance_max", BASE_ENCUMBRANCE + self.character.get("Stats", {}).get("STR", 10))
+                connected_values += 1
+                all_keys.remove("encumbrance_max")
+            elif "EncumBar" in loaded_state:
+                # Handle fernicar.json format
+                encum_bar = loaded_state.get("EncumBar", {})
+                self.encumbrance_max = encum_bar.get("max", BASE_ENCUMBRANCE + self.character.get("Stats", {}).get("STR", 10))
+                connected_values += 1
+                all_keys.remove("EncumBar")
+            else:
+                self.encumbrance_max = BASE_ENCUMBRANCE + self.character.get("Stats", {}).get("STR", 10)
+                unconnected_keys.append("encumbrance_max/EncumBar")
+
+            # Task type and related fields
+            if "task_type" in loaded_state:
+                self.task_type = loaded_state.get("task_type", "idle")
+                connected_values += 1
+                all_keys.remove("task_type")
+            else:
+                self.task_type = "idle"
+                unconnected_keys.append("task_type")
+
+            if "item_being_sold" in loaded_state:
+                self.item_being_sold = loaded_state.get("item_being_sold", None)
+                connected_values += 1
+                all_keys.remove("item_being_sold")
+            else:
+                self.item_being_sold = None
+                unconnected_keys.append("item_being_sold")
+
+            if "current_target_monster" in loaded_state:
+                self.current_target_monster = loaded_state.get("current_target_monster", None)
+                connected_values += 1
+                all_keys.remove("current_target_monster")
+            else:
+                self.current_target_monster = None
+                unconnected_keys.append("current_target_monster")
+
+            if "quest_target_monster" in loaded_state:
+                self.quest_target_monster = loaded_state.get("quest_target_monster", None)
+                connected_values += 1
+                all_keys.remove("quest_target_monster")
+            elif "questmonster" in loaded_state:
+                # Handle fernicar.json format
+                monster_name = loaded_state.get("questmonster", "")
+                if monster_name:
+                    self.quest_target_monster = {"name": monster_name}
+                else:
+                    self.quest_target_monster = None
+                connected_values += 1
+                all_keys.remove("questmonster")
+            else:
+                self.quest_target_monster = None
+                unconnected_keys.append("quest_target_monster/questmonster")
+
+            # Game state
+            if "game_loaded" in loaded_state:
+                self.game_loaded = loaded_state.get("game_loaded", True)
+                connected_values += 1
+                all_keys.remove("game_loaded")
+            else:
+                self.game_loaded = True
+                # Not counting as unconnected since it's an internal state
+
             self.last_tick_time = time.monotonic() * 1000 # Reset timer on load
 
             # Ensure Gold is synced
-            self.character["Gold"] = self.character.get("Inventory", {}).get("Gold Piece", 0)
+            gold_amount = 0
+            if "Inventory" in loaded_state:
+                for item in loaded_state["Inventory"]:
+                    if item[0] == "Gold":
+                        gold_amount = item[1]
+                        break
+
+            self.character["Gold"] = gold_amount
 
             # Validate / recalculate dependent values
             self.encumbrance_max = BASE_ENCUMBRANCE + self.character.get("Stats", {}).get("STR", 10)
             self.xp_max = calculate_xp_for_level(self.character.get("Level", 1) + 1)
+
             # Ensure quest/plot max are reasonable if loaded value is odd
             if self.quest_max <= 0: self.quest_max = 10000
             if self.plot_max <= 0: self.plot_max = 60000
 
+            # Handle current_act if present
+            if "current_act" in loaded_state:
+                # If current_act is present but plot_acts is empty, add it
+                if not self.plot_acts:
+                    self.plot_acts = [loaded_state["current_act"]]
+                connected_values += 1
+                if "current_act" in all_keys:
+                    all_keys.remove("current_act")
+
+            # Handle encumbrance if present
+            if "encumbrance" in loaded_state:
+                # We don't need to store this as it's calculated dynamically
+                connected_values += 1
+                if "encumbrance" in all_keys:
+                    all_keys.remove("encumbrance")
+
+            # Handle task field from fernicar.json
+            if "task" in loaded_state:
+                task_parts = loaded_state["task"].split('|')
+                if len(task_parts) >= 2:
+                    if task_parts[0] == "kill" and not self.current_target_monster:
+                        # Create a monster object from the task info
+                        monster_name = task_parts[1]
+                        monster_level = int(task_parts[2]) if len(task_parts) > 2 else 1
+                        monster_loot = task_parts[3] if len(task_parts) > 3 else ""
+                        self.current_target_monster = {
+                            "name_orig": monster_name,
+                            "name_mod": monster_name,
+                            "level": monster_level,
+                            "loot": monster_loot,
+                            "quantity": 1
+                        }
+                        self.task_type = "executing"
+                connected_values += 1
+                if "task" in all_keys:
+                    all_keys.remove("task")
+
+            # Add remaining keys to unconnected list
+            unconnected_keys.extend(list(all_keys))
+
+            # Ensure XP values are within reasonable limits
+            if self.xp_max > 1000000000:  # Cap at 1 billion to avoid overflow
+                self.xp_max = 1000000000
+            if self.xp_progress > self.xp_max:
+                self.xp_progress = self.xp_max * 0.9  # Set to 90% of max
+
+            # Ensure plot values are within reasonable limits
+            if self.plot_max > 1000000000:  # Cap at 1 billion to avoid overflow
+                self.plot_max = 1000000000
+            if self.plot_progress > self.plot_max:
+                self.plot_progress = self.plot_max * 0.9  # Set to 90% of max
+
+            # Print report
+            print("\n===== GAME STATE LOADING REPORT =====")
+            print(f"Total keys in loaded state: {total_keys}")
+            print(f"Successfully connected values: {connected_values}")
+            print(f"Unconnected keys: {len(unconnected_keys)}")
+            if unconnected_keys:
+                print("List of unconnected keys:")
+                for key in sorted(unconnected_keys):
+                    print(f"  - {key}")
+            print("==================================\n")
+
             print("Game state loaded successfully.")
             self.state_updated.emit("Game Loaded")
+
+            # For debugging - uncomment to exit after loading
+            # import sys
+            # sys.exit(0)
 
         except Exception as e:
             print(f"Error applying loaded state: {e}")

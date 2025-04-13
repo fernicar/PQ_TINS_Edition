@@ -21,15 +21,17 @@ from config_data import (
 )
 from game_logic import GameLogic
 from character_dialog import NewCharacterDialog
+from decode import decode_pqw_file
+import json
 
 # Define application and organization names for QSettings
 APP_NAME = "ProgressQuestPy"
-ORG_NAME = "ZeroSource"
+ORG_NAME = "ThereIsNoSource.org"
 
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Progress Quest (Zero Source Edition)")
+        self.setWindowTitle("Progress Quest (TINS Edition)")
         self.setGeometry(100, 100, 900, 700) # Slightly larger default size
 
         # Load settings (e.g., window position, last save file)
@@ -107,7 +109,7 @@ class MainWindow(QMainWindow):
         layout2.setContentsMargins(0,0,0,0); layout2.setSpacing(3)
         layout2.addWidget(self._create_label("Equipment", header=True))
         self.equips_list = self._create_list_view(["Position", "Equipped"])
-        layout2.addWidget(self.equips_list, 1) # Stretch factor
+        layout2.addWidget(self.equips_list, 2) # Stretch factor
         layout2.addWidget(self._create_label("Inventory", header=True))
         self.inventory_list = self._create_list_view(["Item", "Qty"])
         layout2.addWidget(self.inventory_list, 2) # More stretch for inventory
@@ -467,8 +469,12 @@ class MainWindow(QMainWindow):
         # Save current state
         try:
             game_state_data = self.game_logic.get_state_for_saving()
-            pickled_data = pickle.dumps(game_state_data)
-            compressed_data = zlib.compress(pickled_data, level=zlib.Z_BEST_COMPRESSION) # Use constant
+
+            # Use JSON serialization with double quotes instead of pickle
+            # This ensures strings with apostrophes are properly formatted
+            json_data = json.dumps(game_state_data, ensure_ascii=False, indent=None)
+            print(f">\tGame data to be saved:\n{json_data}")
+            compressed_data = zlib.compress(json_data.encode('utf-8'), level=zlib.Z_BEST_COMPRESSION)
 
             with open(self.save_file_path, 'wb') as f:
                 f.write(compressed_data)
@@ -492,21 +498,26 @@ class MainWindow(QMainWindow):
             return False
 
     def find_most_recent_save(self):
-        """Find the most recent .pq save file in the settings directory or CWD."""
+        """Find the most recent .pq or .pqw save file in the settings directory or CWD."""
         # Prefer settings directory
         save_dir = os.path.dirname(self.settings.fileName())
         try:
-            files_in_dir = [os.path.join(save_dir, f) for f in os.listdir(save_dir) if f.endswith(SAVE_FILE_EXT)]
+            # Look for both .pq and .pqw files
+            pq_files = [os.path.join(save_dir, f) for f in os.listdir(save_dir) if f.endswith(SAVE_FILE_EXT)]
+            pqw_files = [os.path.join(save_dir, f) for f in os.listdir(save_dir) if f.lower().endswith('.pqw')]
+            files_in_dir = pq_files + pqw_files
         except FileNotFoundError:
             files_in_dir = []
             print(f"Settings directory not found: {save_dir}. Checking CWD.")
             save_dir = os.getcwd() # Fallback to current working directory
             try:
-                 files_in_dir = [os.path.join(save_dir, f) for f in os.listdir(save_dir) if f.endswith(SAVE_FILE_EXT)]
+                # Look for both .pq and .pqw files in CWD
+                pq_files = [os.path.join(save_dir, f) for f in os.listdir(save_dir) if f.endswith(SAVE_FILE_EXT)]
+                pqw_files = [os.path.join(save_dir, f) for f in os.listdir(save_dir) if f.lower().endswith('.pqw')]
+                files_in_dir = pq_files + pqw_files
             except FileNotFoundError:
                 print("CWD not found.")
                 return None
-
 
         if not files_in_dir:
             print(f"No save files found in {save_dir}")
@@ -514,8 +525,19 @@ class MainWindow(QMainWindow):
 
         # Sort by modification time, newest first
         try:
-             files_in_dir.sort(key=lambda f: os.path.getmtime(f), reverse=True)
-             return files_in_dir[0]
+            files_in_dir.sort(key=lambda f: os.path.getmtime(f), reverse=True)
+
+            # Prioritize .pq files over .pqw files if they have the same base name
+            # This ensures we load the native format if both exist
+            for file in files_in_dir:
+                if file.lower().endswith('.pq'):
+                    base_name = os.path.splitext(os.path.basename(file))[0]
+                    pqw_equivalent = os.path.join(os.path.dirname(file), f"{base_name}.pqw")
+                    if pqw_equivalent in files_in_dir:
+                        # If both .pq and .pqw exist with same name, prioritize .pq
+                        files_in_dir.remove(pqw_equivalent)
+
+            return files_in_dir[0]
         except FileNotFoundError: # File might disappear between listing and getmtime
              print("Error accessing file modification times.")
              return None
@@ -533,23 +555,45 @@ class MainWindow(QMainWindow):
         QApplication.processEvents()
 
         try:
-            with open(file_path, 'rb') as f:
-                compressed_data = f.read()
+            # Check if this is a .pqw file (base64 encoded JSON)
+            if file_path.lower().endswith('.pqw'):
+                print(f"Detected .pqw file format, using decode_pqw_file to convert")
+                # Use the decode_pqw_file function to get JSON data
+                json_data = decode_pqw_file(file_path)
+                if not json_data:
+                    raise ValueError("Failed to decode .pqw file")
 
-            # Decompress and unpickle
-            decompressed_data = zlib.decompress(compressed_data)
-            loaded_state = pickle.loads(decompressed_data)
+                # Parse the JSON data
+                loaded_state = json.loads(json_data)
+            else:
+                # Standard .pq file (compressed pickle)
+                with open(file_path, 'rb') as f:
+                    compressed_data = f.read()
 
+                # Decompress data
+                decompressed_data = zlib.decompress(compressed_data)
+
+                # Try to load as JSON first (new format)
+                try:
+                    loaded_state = json.loads(decompressed_data.decode('utf-8'))
+                except (json.JSONDecodeError, UnicodeDecodeError):
+                    # Fall back to pickle for backward compatibility (old format)
+                    try:
+                        loaded_state = pickle.loads(decompressed_data)
+                    except Exception as pickle_error:
+                        raise ValueError(f"Failed to load save file: {pickle_error}")
+
+            print(f">\tGame data from {file_path} is:\n{loaded_state}.")
             # Apply the loaded state to the game logic
             self.game_logic.apply_loaded_state(loaded_state) # apply_loaded_state should set game_loaded=True
 
             if self.game_logic.game_loaded:
-                self.save_file_path = file_path # Update save path
+                self.save_file_path = file_path.replace('.pqw', SAVE_FILE_EXT) if file_path.lower().endswith('.pqw') else file_path
                 self.setWindowTitle(f"Progress Quest - {self.game_logic.character.get('Name', 'Unknown')}")
                 self.update_ui("Game Loaded") # Force immediate UI update with reason
                 self.timer.start(TIMER_INTERVAL_MS)
                 self.save_action.setEnabled(True) # Enable save menu item
-                self.settings.setValue("Files/lastOpened", file_path) # Store as last opened
+                self.settings.setValue("Files/lastOpened", self.save_file_path) # Store as last opened
                 self.status_bar_label.setText("Game loaded successfully.")
                 QTimer.singleShot(2000, lambda: self.status_bar_label.setText(self.game_logic.task_description + "...")) # Restore status after 2s
                 return True
@@ -601,7 +645,8 @@ class MainWindow(QMainWindow):
         if not os.path.isdir(start_dir):
             start_dir = os.getcwd() # Fallback to CWD
 
-        file_path, _ = QFileDialog.getOpenFileName(self, "Load Progress Quest Game", start_dir, f"Progress Quest Files (*{SAVE_FILE_EXT})")
+        file_path, _ = QFileDialog.getOpenFileName(self, "Load Progress Quest Game", start_dir,
+                                                  f"Progress Quest Files (*{SAVE_FILE_EXT} *.pqw);;PQ Files (*{SAVE_FILE_EXT});;PQW Files (*.pqw)")
         if file_path:
             self.timer.stop() # Stop current game before loading
             return self.load_game_from_path(file_path)
