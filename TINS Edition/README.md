@@ -1,234 +1,369 @@
 <!-- Zero Source Specification v1.0 -->
-# Progress Quest (Zero Source Edition)
+<!-- ZS:PROJECT:ProgressQuestTINS -->
+<!-- ZS:TYPE:DesktopApplication -->
+<!-- ZS:PLATFORM:CrossPlatform -->
+<!-- ZS:LANGUAGE:Python -->
+<!-- ZS:UI_TOOLKIT:PySide6 -->
+<!-- ZS:COMPLEXITY:HIGH -->
 
-<!-- ZS:COMPLEXITY:MEDIUM -->
-<!-- ZS:PLATFORM:WINDOWS -->
-<!-- ZS:LANGUAGE:OBJECT_PASCAL -->
-<!-- ZS:FRAMEWORK:DELPHI_VCL -->
+# Progress Quest TINS Edition
 
 ## Description
 
-Progress Quest is a satirical "zero-player" role-playing game. The user creates a character, and the game plays itself automatically. The character progresses through levels, undertakes quests, acquires items, and navigates plot acts without any user interaction beyond the initial setup and occasional viewing. The core gameplay loop involves watching progress bars fill up and reading humorous, procedurally generated status updates. It parodies common tropes found in fantasy RPGs and MMORPGs.
+This project describes "Progress Quest TINS Edition", a desktop application implementing the classic zero-player game, Progress Quest. Progress Quest is a satirical take on fantasy role-playing games where the character progresses automatically without any player interaction beyond initial character creation. The player's role is simply to watch their character embark on adventures, complete quests, gain levels, acquire loot, and interact with a simulated world.
 
-This application should replicate the original Progress Quest experience, including its single-player offline mode and optional multiplayer interactions with a central server (historically `progressquest.com`).
+This README serves as the sole source for an AI Language Model (LLM) to generate the complete, functional Python application using the PySide6 GUI toolkit. The goal is to replicate the core experience of Progress Quest in a desktop environment, focusing on the display of character progression and status.
 
 ## Functionality
 
-### Core Gameplay Loop (Automatic)
+### Core Features
 
-1.  **Character Progression:** The character automatically performs actions (tasks) over time. These tasks contribute to experience gain, quest completion, and plot advancement.
-2.  **Task Execution:** The current task (e.g., "Executing kobold", "Heading to market") is displayed in the status bar, along with a progress bar showing time until completion. Task durations vary based on character level and task type.
-3.  **Experience and Leveling:**
-    *   A progress bar tracks experience points (XP), represented as time.
-    *   Completing tasks (especially combat) grants XP.
-    *   When the XP bar fills, the character levels up.
-    *   Leveling up increases HP/MP maximums, grants stat points, and potentially a new spell. The XP required for the next level increases significantly.
-4.  **Quest System:**
-    *   Characters automatically undertake quests (e.g., "Exterminate the rats", "Seek the Holy Grail", "Deliver this boring item").
-    *   Quest progress is tracked by a progress bar. Completing tasks advances quest progress.
-    *   Completing a quest grants a reward (new spell, equipment, stat point, or item) and assigns a new quest.
-5.  **Plot Development:**
-    *   The game features multiple "Acts" (e.g., "Prologue", "Act I", "Act II", ... represented by Roman numerals).
-    *   Plot progress is tracked by a progress bar, advanced by completing tasks.
-    *   Completing an Act triggers a (simulated) cinematic/narrative transition and potentially grants rewards. Plot progression requires significantly more time than quests.
-6.  **Combat (Simulated):**
-    *   Characters automatically "fight" monsters appropriate to their level. Monsters are procedurally generated or drawn from quest targets.
-    *   Monster names can include various modifiers (e.g., "Greater", "Undead", "Baby", "Giant", "Were-", "Rex").
-    *   Combat resolution is time-based (filling the task progress bar).
-    *   Defeating monsters can yield loot (generic items, special items, gold).
-7.  **Economy and Inventory:**
-    *   Characters automatically collect gold pieces and items.
-    *   An inventory list displays items and quantities.
-    *   An encumbrance bar tracks inventory load relative to character Strength (STR). Gold does not contribute to encumbrance.
-    *   When encumbrance is high, the character automatically "heads to market" to sell items (oldest items first, excluding gold).
-    *   Characters automatically attempt to "buy better equipment" when they have sufficient gold.
-8.  **Equipment:** Characters automatically equip the best items they find for various slots (Weapon, Shield, Helm, Armor, etc.).
+1.  **Zero-Player Gameplay:** The application runs automatically once a character is loaded or created. The character performs actions like killing monsters, traveling, buying/selling items, and completing quests without user input.
+2.  **Character Creation:** Allows users to "roll" a new character, including:
+    *   Generating or entering a character name.
+    *   Selecting a Race and Class from predefined lists, each providing specific stat bonuses.
+    *   Rolling primary stats (STR, CON, DEX, INT, WIS, CHA) using a 3d6 method.
+    *   Displaying rolled stats and their total.
+    *   Ability to "Reroll" stats and "Unroll" to previous rolls.
+    *   Saving the new character, potentially overwriting existing characters with the same name after confirmation.
+3.  **Character Progression:**
+    *   Characters gain Experience (XP) over time by completing tasks.
+    *   Characters level up upon reaching XP thresholds, gaining improved stats (HP/MP Max), learning/improving spells, and enhancing base stats.
+    *   Characters progress through Plot Acts, starting from Prologue, with increasingly longer completion times.
+    *   Characters undertake and complete Quests automatically.
+4.  **Inventory and Equipment:**
+    *   Characters automatically acquire equipment for various slots (Weapon, Helm, Armor pieces, etc.). Better equipment replaces worse equipment.
+    *   Characters accumulate items (loot from monsters, quest rewards, special items) in an inventory.
+    *   Characters manage Encumbrance based on inventory items (excluding Gold) relative to their Strength (STR).
+    *   Characters automatically sell excess inventory items when encumbrance is full.
+    *   Characters automatically buy better equipment when they have sufficient Gold.
+    *   Gold is acquired through selling items and completing tasks.
+5.  **Spells:** Characters automatically learn and improve spells from a predefined list, influenced by their Wisdom (WIS) and Level.
+6.  **Task System:** The character's current action is displayed, along with a progress bar showing time until completion. Actions are determined by a task queue and game logic (e.g., fighting, traveling, selling, plot cinematics).
+7.  **Persistence:**
+    *   Character state is saved automatically at regular intervals and upon closing the application.
+    *   Character state can be saved manually via a menu option.
+    *   Characters are saved to individual `.pqw` files (Base64 encoded JSON) in a `./savegame` directory.
+    *   The application automatically loads the most recently modified `.pqw` file on startup.
+    *   Users can manually load any `.pqw` file via a menu option (files outside the save directory are copied in).
+8.  **Theming:** Supports applying visual themes using Qt Style Sheets (`.qss` files). Includes default light and dark themes and allows users to select custom theme files. The selected theme becomes the default for subsequent launches.
+9.  **UI Display:** Provides a comprehensive view of the character's status, including traits, stats, equipment, inventory, spells, plot progression, quest log, and current action.
 
 ### User Interface
 
-The main application window should have the following layout:
+The main application window should be structured as follows:
 
+```mermaid
+graph TD
+    subgraph "GUI Window"
+        MenuBar[Menu Bar: File, View, Help] --> MainArea;
+        MainArea --> TopHBox{Horizontal Layout};
+        TopHBox --> LeftVBox[Left Column];
+        TopHBox --> CenterVBox[Center Column];
+        TopHBox --> RightVBox[Right Column];
+
+        LeftVBox --> CharGroup[Group: Character Sheet];
+        CharGroup --> TraitsTable[Table: Traits];
+        CharGroup --> StatsTable[Table: Stats];
+        LeftVBox --> ExpLabel[Label: Experience];
+        ExpLabel --> ExpBar[Progress Bar: Experience];
+        LeftVBox --> SpellGroup[Group: Spell Book];
+        SpellGroup --> SpellsTable[Table: Spells];
+
+        CenterVBox --> EquipGroup[Group: Equipment];
+        EquipGroup --> EquipsTable[Table: Equipment];
+        CenterVBox --> InvGroup[Group: Inventory];
+        InvGroup --> InventoryTable[Table: Inventory];
+        CenterVBox --> EncumLabel[Label: Encumbrance];
+        EncumLabel --> EncumBar[Progress Bar: Encumbrance];
+
+        RightVBox --> PlotGroup[Group: Plot Development];
+        PlotGroup --> PlotsList[List: Acts Completed/Current];
+        RightVBox --> PlotBar[Progress Bar: Plot];
+        RightVBox --> QuestGroup[Group: Quests];
+        QuestGroup --> QuestsList[List: Quests Completed/Current];
+        RightVBox --> QuestBar[Progress Bar: Quest];
+        MainArea --> BottomArea[Bottom Area];
+        BottomArea --> KillLabel[Label: Current Action];
+        KillLabel --> TaskBar[Progress Bar: Current Task];
+    end
 ```
-+-----------------------------------------------------------------------------+
-| [ Character Sheet Panel ] | [ Equipment/Inventory Panel ] | [ Plot/Quest Panel ] |
-|                           |                               |                      |
-| - Traits (Name, Race,     | - Equipment List (Slot: Item) | - Plot Acts List     |
-|   Class, Level) ListView  | - Eq. Progress Bar (Hidden?)  | - Plot Progress Bar  |
-| - Stats (STR, CON, etc.)  |                               |                      |
-|   ListView                | - Inventory Label             | - Quests Label       |
-| - Exp. Label              | - Inventory List (Item: Qty)  | - Quests List        |
-| - Experience Progress Bar | - Encumbrance Label           | - Quest Progress Bar |
-| - Spell Book Label        | - Encumbrance Progress Bar    |                      |
-| - Spells List (Name: Lvl) |                               |                      |
-|                           |                               |                      |
-+-----------------------------------------------------------------------------+
-| [ Status Bar (Current Task...) ]                                            |
-+-----------------------------------------------------------------------------+
-| [ Task Progress Bar ]                                                       |
-+-----------------------------------------------------------------------------+
-```
 
-*   **Panels:** Three main vertical panels.
-*   **ListViews:** Used extensively to display character traits, stats, equipped items, inventory, known spells (with Roman numeral levels), plot acts, and quests. ListViews should be read-only, typically with columns for Category/Value or Item/Quantity. Plot/Quest lists should indicate completed items (e.g., checkmark icon, strikethrough).
-*   **Progress Bars:** Visualize progress for the current Task, overall Experience, current Quest, current Plot Act, and Inventory Encumbrance. Hints should show details (e.g., "X/Y XP", "N% complete", "N seconds remaining").
-*   **Status Bar:** Displays the character's current action or status messages.
-*   **Window Title:** Should display "Progress Quest - [Character Name]" or similar.
+**Key UI Elements & Behavior:**
 
-### Character Creation
+*   **Window Title:** Displays "Progress Quest TINS Edition - \[Character Name]".
+*   **Menu Bar:**
+    *   **File:** New Character, Load .pqw File, Save .pqw File, Exit.
+    *   **View:** Select Theme.
+    *   **Help:** Visit Repository (opens GitHub URL), About (shows license/info dialog).
+*   **Tables (Traits, Stats, Spells, Equipment, Inventory):**
+    *   Display data in two columns (e.g., "Trait", "Value" or "Slot", "Item").
+    *   Headers should be visible.
+    *   Vertical headers (row numbers) should be hidden.
+    *   Content should be non-editable by the user.
+    *   Selection should be disabled.
+    *   Column widths should adjust appropriately (some fixed, some stretch).
+    *   Rows should be compact.
+    *   Tables should update dynamically as game state changes. Inventory/Spells tables resize rows dynamically. Equipment/Traits/Stats tables have fixed rows.
+*   **Lists (Plots, Quests):**
+    *   Display single columns of text items.
+    *   Selection should be disabled.
+    *   Items should be added dynamically.
+    *   Lists should scroll to the bottom when new items are added (especially Plots on new Act, Quests on new quest).
+    *   Use icons/prefixes (e.g., `✓` for completed, `►` for current) to indicate status.
+*   **Progress Bars (Exp, Encum, Plot, Quest, Task):**
+    *   Visually represent progress from 0% to 100%.
+    *   Display text indicating status (e.g., percentage, value/max, time remaining, hint text). Specific formats:
+        *   Exp: "X XP needed - Y%" (tooltip: full hint)
+        *   Encum: "Current/Max cubits" (tooltip: full hint)
+        *   Plot: "Time remaining - Y%" (tooltip: full hint)
+        *   Quest: "Y% complete" (tooltip: full hint)
+        *   Task: "Y%" (tooltip: full hint)
+    *   Update dynamically based on game state.
+*   **Labels (Kill Label, Bar Labels):** Display static text or dynamic text (like the current action). Kill Label should be centered and bold.
+*   **Dialogs:**
+    *   **New Character:** Fields for Name (with random '?' button), Radio buttons for Race/Class, Display area for rolled Stats (with Total and color coding), Roll/Unroll buttons, Sold! (Accept)/Cancel buttons.
+    *   **About:** Displays application title, version, and license text.
+    *   **Theme Selector:** Standard file dialog to choose `.qss` files.
+*   **Layout:** Use nested layouts (QVBoxLayout, QHBoxLayout) and QGroupBox widgets to achieve the three-column structure. Columns should resize appropriately. Use stretch factors to allocate space (e.g., Center wider than Left/Right).
 
-*   A dedicated dialog/form allows new character creation.
-*   **Inputs:** Character Name (text input, max 30 chars), Race (Radio button selection from predefined list), Class (Radio button selection from predefined list).
-*   **Stat Rolling:**
-    *   Display stats: STR, CON, DEX, INT, WIS, CHA.
-    *   Stats are rolled using a 3d6 method (sum of three 6-sided dice).
-    *   "Roll" button generates new stats for all attributes.
-    *   "Unroll" button reverts to the previous set of stats (maintains a history of recent rolls).
-    *   Display the total points rolled. Visual feedback for exceptionally high/low rolls (e.g., color change).
-*   **Name Generation:** A '?' button generates a random fantasy-style name.
-*   **Account Info (Multiplayer):** If creating a character for a multiplayer realm requiring authentication, fields for Account and Password should be visible.
-*   **Confirmation:** "Sold!" (OK) button confirms character creation, "Cancel" aborts.
+### Behavior Specifications
 
-### Game Management
-
-*   **Startup Screen:** An initial screen presents options:
-    *   New Game (Single Player)
-    *   New Game (Multiplayer)
-    *   Load Game
-    *   Exit
-    *   Link to `progressquest.com`.
-*   **Saving:**
-    *   The game state should be saved automatically periodically and upon closing the application.
-    *   Save files use the `.pq` extension (e.g., `CharacterName.pq`).
-    *   Save data should be compressed using ZLib.
-    *   Optionally create a backup (`.bak`) of the previous save file when saving.
-*   **Loading:** Allows loading a game state from a `.pq` file selected via a standard file open dialog.
-*   **Minimizing:** Option to minimize the application to the system tray. Clicking the tray icon restores the window.
-*   **Character Sheet Export:** Optional feature (e.g., via Ctrl+A or command-line flag) to display or export a plain text summary of the character sheet.
-
-### Multiplayer Features
-
-*   **Realm Selection:** If "New Game (Multiplayer)" is chosen, a dialog allows selecting a game "Realm" (server) from a list fetched from a central server (`progressquest.com/list.php`). Realms may have descriptions and specific requirements (e.g., password/access code, account needed for creation). Some realms might be directories leading to sub-realms.
-*   **Account Login:** A separate login dialog may appear (or integrated into realm selection/creation) for realms requiring authentication (Username/Password). Supports optional proxy server configuration (Server/Port).
-*   **Server Communication ("Bragging"):**
-    *   Periodically (e.g., on level up, act completion) send character progress data (level, stats, best item/spell, current act, etc.) to a designated server URL (e.g., `progressquest.com/knoram.php`).
-    *   Uses HTTP GET requests.
-    *   Parameters are URL-encoded.
-    *   Includes a basic checksum (`p=` parameter) generated using an LFSR algorithm based on other parameters and a secret passkey received on character creation.
-    *   Handles server responses (e.g., displaying messages).
-*   **Guilds:** Ability to set a guild affiliation (text input). This information is included in server communication.
-*   **Motto:** Ability to set a character motto (text input), included in server communication.
+1.  **Initialization:**
+    *   Create the `./savegame` directory if it doesn't exist.
+    *   Attempt to load the most recently modified `.pqw` file from `./savegame`.
+    *   If successful, display the main window with the loaded character.
+    *   If no saves exist or loading fails, show the New Character dialog.
+    *   If the New Character dialog is accepted, create the character, save it, and show the main window.
+    *   If the New Character dialog is cancelled, exit the application.
+2.  **Game Loop:**
+    *   A QTimer triggers `_tick` at `TICK_INTERVAL_MS`.
+    *   `_tick` calculates elapsed time since the last tick.
+    *   Calls the core game logic `process_tick` with the game state and elapsed time.
+    *   Calls `update_ui` to refresh the display based on the (potentially modified) game state.
+    *   Handles auto-save countdown.
+3.  **UI Updates:** The `update_ui` function reads the current `game_state` dictionary and populates all relevant widgets (tables, lists, progress bars, labels) with the latest data.
+4.  **Task Execution:**
+    *   The `TaskBar` fills based on the current task's duration and elapsed time.
+    *   When the `TaskBar` completes, `process_task_completion` logic runs (e.g., grant loot for kills).
+    *   XP, Quest, and Plot progress bars are potentially incremented based on the completed task's duration.
+    *   Checks for Level Up, Quest Completion, or Act Completion are performed if applicable.
+    *   The next task is dequeued from the `queue` or determined by game logic (sell items if encumbered, buy items if rich, otherwise kill monsters).
+    *   The `KillLabel` and `TaskBar` are updated for the new task.
+5.  **Saving/Loading:**
+    *   Saving encodes the `game_state` dictionary to JSON, then Base64, and writes to the `.pqw` file. Updates save timestamp and captures current PRNG state.
+    *   Loading reads the file, decodes Base64, parses JSON into `game_state`. Restores PRNG state. Merges loaded state with default schema to handle missing fields gracefully. Recalculates transient UI data like bar hints.
+6.  **Theming:** Loading a theme reads the `.qss` file content, applies it to the application instance, and overwrites `resources/default_theme.qss` with the selected theme's content (prepended with a warning comment). Ensures `resources/default_theme.qss` exists, creating it from `dark_theme.qss` if necessary on first run.
+7.  **Window Closing:** Stops the game timer, triggers an auto-save, and then closes the application. If saving fails, prompts the user whether to quit anyway.
 
 ## Technical Implementation
 
+---
+
 ### Architecture
 
-*   **Platform:** Native Windows Desktop GUI Application.
-*   **Language:** Object Pascal (compatible with Delphi).
-*   **Framework:** Delphi Visual Component Library (VCL) or a compatible framework (Lazarus LCL).
-*   **Core Logic:** Primarily driven by a central timer (`TTimer`) that simulates the passage of time and triggers game events (task completion, XP gain, quest/plot progress).
-*   **Modularity:** Separate units/modules for main game logic, character creation, configuration data, web communication, compression, startup/login/server selection forms.
+* **Model-View Separation (Implicit):**
+  - **Model:** The `game_state` dictionary and the functions in `game.py` represent the core data model and business logic. The `game.py` file contains all non-GUI-related logic and is self-contained in the sense that it does not depend on any UI toolkit. This allows it to function independently of the GUI and facilitates testing, such as with a `game_cli.py` file that interacts only with the core logic.
+  - **View and Controller:** Each GUI implementation (e.g., `main.py` for PySide6, `main_tkinter.py` for Tkinter) serves as both the View and Controller. GUI-specific modules manage event handling (e.g., infinite loops, user actions, timers), interact with `game.py` to manipulate game state, and update the user interface accordingly. These GUI modules are fully independent of one another, allowing you to swap out the GUI toolkit by replacing `main.py` with another implementation (e.g., `main_tkinter.py`).
 
-### Data Structures
+* **Main Components:**
+  - **`game.py`:** Contains all core game logic, including constants, data structures, PRNG, character creation, progression logic, task generation, and save/load helpers. It is lightweight, reusable, and testable without GUI requirements.
+  - **`main.py`:** Contains the PySide6-specific application setup, `MainWindow` class, UI element definitions, layout, event handling (timer, menus), dialog implementations, and any other interaction with `game.py`. It handles the event loop and acts as the intermediary between the GUI and the core game logic.
+  - **`main_tkinter.py`:** Functions in a similar capacity as `main.py` but uses Tkinter instead of PySide6. It implements its own event handling and interface logic while interacting with `game.py` in the same way.
 
-*   **Character State:**
-    *   `Traits`: Name (String), Race (String), Class (String), Level (Integer).
-    *   `Stats`: STR, CON, DEX, INT, WIS, CHA (Integers). HPMax, MPMax (Integers).
-    *   `Experience`: Current XP (Integer, time-based), XP for next level (Integer, time-based).
-    *   `Equipment`: A collection (e.g., list or dictionary) mapping equipment slots (String: Weapon, Shield, Helm, Hauberk, Brassairs, Vambraces, Gauntlets, Gambeson, Cuisses, Greaves, Sollerets) to item descriptions (String, e.g., "+2 Vorpal Hackbarm"). Track the "best" item for server reporting.
-    *   `Inventory`: A collection (e.g., list or dictionary) mapping item names (String) to quantities (Integer). Gold stored as a specific item ("Gold Piece"). Item names can be complex (e.g., "Astral Fleece of Suffering").
-    *   `Spells`: A collection (e.g., list or dictionary) mapping spell names (String) to spell levels (String, Roman numeral representation).
-    *   `Quests`: A list of completed/current quest descriptions (String). Track progress (Integer/Percentage) for the current quest. Store reference to target monster/item if applicable.
-    *   `Plot`: A list of completed/current plot act names (String, e.g., "Act VII"). Track progress (Integer/Percentage) for the current act.
-    *   `Game State`: Current task description (String), task progress (Integer), task duration (Integer), encumbrance (Integer), max encumbrance (Integer). Multiplayer info: HostName, HostAddr, Login, Password, Passkey, Guild, Motto.
-*   **Configuration Data (Crucial - Must be embedded or loadable):**
-    *   `Weapons`: List of (Name: String, BaseValue: Integer).
-    *   `Armors`: List of (Name: String, BaseValue: Integer).
-    *   `Shields`: List of (Name: String, BaseValue: Integer).
-    *   `OffenseAttrib`: List of (ModifierName: String, Bonus: Integer).
-    *   `DefenseAttrib`: List of (ModifierName: String, Bonus: Integer).
-    *   `OffenseBad`: List of (ModifierName: String, Penalty: Integer).
-    *   `DefenseBad`: List of (ModifierName: String, Penalty: Integer).
-    *   `Spells`: List of spell names (String).
-    *   `BoringItems`: List of mundane item names (String).
-    *   `Specials`: List of special item base names (String).
-    *   `ItemAttrib`: List of special item prefixes (String).
-    *   `ItemOfs`: List of special item suffixes (String, "of X").
-    *   `Monsters`: List of (Name: String, Level: Integer, LootItem: String). '*' loot indicates generic drop.
-    *   `MonsterMods`: List of (LevelAdjustment: Integer, Pattern: String). '*' in pattern is placeholder for base monster name.
-    *   `Races`: List of (Name: String, StatBonuses: String).
-    *   `Classes`: List of (Name: String, StatBonuses: String).
-    *   `Titles`: List of standard titles (String).
-    *   `ImpressiveTitles`: List of impressive titles (String).
+* **Event Loop:**  
+  - The event loop is GUI-specific and resides in the respective GUI modules (`main.py`, `main_tkinter.py`, etc.). For example, the PySide6 implementation in `main.py` relies on the `QTimer` mechanism to trigger game progression ticks, while Tkinter would use its own timing mechanism (e.g., `after` method).
 
-### Algorithms
+### Key Advantages of This Design:
+1. **Modularity:**  
+   Each GUI module operates independently, making it easy to swap out `main.py` for another implementation, such as `main_tkinter.py`, without affecting `game.py`.
 
-*   **Game Loop (Timer-based):**
-    1.  Calculate elapsed time since last tick.
-    2.  Increment current task progress.
-    3.  If task complete:
-        *   Resolve task outcome (grant XP, loot, potentially complete quest/plot step).
-        *   Dequeue next queued task OR Determine next task based on game state (encumbrance -> market, low gold -> killing fields, sufficient gold -> buy equipment, otherwise -> killing fields).
-        *   Start new task, resetting task progress bar.
-    4.  If combat task completed:
-        *   Increment XP bar. Check for Level Up.
-        *   Increment Quest progress bar. Check for Quest Completion.
-        *   Increment Plot progress bar. Check for Act Completion.
-    5.  Update UI elements (progress bars, status text).
-*   **Monster Generation:** Select base monster near character level. Apply modifiers from `MonsterMods` based on level difference vs character, potentially combining multiple mods (e.g., Sick+Young or Big+Special). Determine quantity based on level difference. Format name (Indefinite/Definite article, pluralization).
-*   **Item Generation:**
-    *   *Equipment:* Select base item (Weapon/Armor/Shield) near character level. Apply `Offense/Defense Attrib` or `Offense/Defense Bad` modifiers based on level difference until the difference is accounted for or max modifiers reached. Prepend numeric bonus/penalty if difference remains.
-    *   *Special Items:* Combine random `ItemAttrib` + `Special` + `ItemOfs`.
-    *   *Boring Items:* Pick randomly from `BoringItems` list.
-*   **Stat Rolling:** Sum of 3d6 for each stat. Store previous roll for "Unroll".
-*   **Name Generation:** Combine consonant/vowel/consonant parts randomly from predefined lists. Proper-case the result.
-*   **Saving/Loading:** Use component streaming to serialize/deserialize relevant form/component properties. Apply ZLib compression/decompression to the stream. Handle file I/O and backup creation.
-*   **Encumbrance:** Calculate as sum of quantities of all items in inventory *except* "Gold Piece". Max encumbrance = 10 + STR stat.
-*   **Multiplayer Communication (Brag):** Construct URL with parameters. Calculate LFSR checksum using parameters and passkey. Send HTTP GET request. Parse simple pipe-delimited response.
-*   **LFSR Checksum:** Implement the specific Linear Feedback Shift Register algorithm used in `Main.pas -> LFSR` function for generating the `p=` parameter.
-*   **Roman Numerals:** Convert integers to/from Roman numerals for spell levels and plot acts.
+2. **Reusability:**  
+   The `game.py` file remains free of GUI-related dependencies, ensuring that it can be reused for testing (`game_cli.py`) or other potential applications.
+
+3. **Simplified Abstractions:**  
+   Instead of introducing an additional interface layer (e.g., `interface.py`), all controller-like responsibilities are consolidated within each GUI module (e.g., `main.py` or `main_tkinter.py`), keeping the architecture straightforward.
+
+### Save File Format (`.pqw`)
+
+The application persists the character's state in `.pqw` files located in the `./savegame` directory. These files contain a single Base64 encoded string, which, when decoded, reveals a JSON object representing the entire `game_state`.
+
+**Core Principles:**
+
+1.  **Format:** Base64(JSON(game_state))
+2.  **Strict Order:** Fields *must* appear in the JSON object exactly in the order defined below. This is critical for compatibility testing and consistent loading/saving across versions.
+3.  **Type Integrity:** Each field must strictly adhere to the specified data type.
+4.  **Completeness:** All fields defined in this structure must be present in a valid save file.
+
+**JSON Structure Definition:**
+
+The decoded JSON object adheres to the following structure and field order:
+
+```json
+{
+  "Traits": { "Name": "", "Race": "", "Class": "", "Level": 0 },
+  "dna": [0.0, 0.0, 0.0, 0], "seed": [0.0, 0.0, 0.0, 0],
+  "birthday": "", "birthstamp": 0,
+  "Stats": {
+    "seed": [0.0, 0.0, 0.0, 0],
+    "STR": 0, "best": "", "CON": 0, "DEX": 0, "INT": 0,
+    "WIS": 0, "CHA": 0, "HP Max": 0, "MP Max": 0
+  },
+  "beststat": "", "task": "", "tasks": 0, "elapsed": 0,
+  "bestequip": "",
+  "Equips": {
+    "Weapon": "", "Shield": "", "Helm": "", "Hauberk": "",
+    "Brassairts": "", "Vambraces": "", "Gauntlets": "",
+    "Gambeson": "", "Cuisses": "", "Greaves": "", "Sollerets": ""
+  },
+  "Inventory": [["Gold", 0]],
+  "Spells": [["", ""]], "act": 0, "bestplot": "", "Quests": [""],
+  "questmonster": "", "kill": "",
+  "ExpBar": { "position": 0.0, "max": 0, "percent": 0, "remaining": 0, "time": "", "hint": "" },
+  "EncumBar": { "position": 0, "max": 0, "percent": 0, "remaining": 0, "time": "", "hint": "" },
+  "PlotBar": { "position": 0.0, "max": 0, "percent": 0, "remaining": 0, "time": "", "hint": "" },
+  "QuestBar": { "position": 0.0, "max": 0, "percent": 0, "remaining": 0, "time": "", "hint": "" },
+  "TaskBar": { "position": 0, "max": 0, "percent": 0, "remaining": 0, "time": "", "hint": "" },
+  "queue": [""], "date": "", "stamp": 0, "saveName": "",
+  "bestspell": "", "bestquest": "", "questmonsterindex": 0
+}
+```
+
+**Field Explanations:**
+
+1.  **`Traits`** (`Object/Dictionary`)
+    *   Contains fundamental character identification.
+    *   `Name` (`String`): The character's chosen name.
+    *   `Race` (`String`): The character's selected race.
+    *   `Class` (`String`): The character's selected class.
+    *   `Level` (`Unsigned Integer`): The character's current experience level.
+
+2.  **`dna`** (`Array[Float, Float, Float, Unsigned Integer]`)
+    *   The persistent state of the Pseudo-Random Number Generator (PRNG) *at the exact moment the character's initial stats were rolled*.
+    *   Used by the "Unroll" feature during character creation to revert to previous stat rolls.
+    *   Float values must preserve high precision (e.g., `0.1234567890123456`).
+
+3.  **`seed`** (`Array[Float, Float, Float, Unsigned Integer]`)
+    *   The state of the PRNG *at the moment the game was saved*.
+    *   This state is loaded to ensure that subsequent random events continue deterministically from where they left off.
+    *   It is distinct from `dna` and `Stats.seed`.
+    *   Float values must preserve high precision.
+
+4.  **`birthday`** (`String`)
+    *   A human-readable timestamp indicating when the character was created (e.g., "Fri Mar 08 2019 18:45:30 GMT-0400 (Country)").
+
+5.  **`birthstamp`** (`Unsigned Integer`)
+    *   A numerical timestamp (likely milliseconds since the Unix epoch) representing the character's creation time. Corresponds to `birthday`.
+
+6.  **`Stats`** (`Object/Dictionary`)
+    *   Stores the character's attributes.
+    *   `seed` (`Array[Float, Float, Float, Unsigned Integer]`): The PRNG state used to roll these stats. **Must be identical** to the top-level `dna` field.
+    *   `STR`, `CON`, `DEX`, `INT`, `WIS`, `CHA` (`Unsigned Integer`): The character's rolled base values for the six primary statistics.
+    *   `best` (`String`): The name (e.g., "INT") of the primary stat that had the highest value *at the time of creation*.
+    *   `HP Max`, `MP Max` (`Unsigned Integer`): The character's maximum Hit Points and Mana Points, respectively. These increase upon leveling up.
+
+7.  **`beststat`** (`String`)
+    *   A formatted string representing the character's *current* highest primary stat and its value (e.g., "INT 16049"). Recalculated on load/level up.
+
+8.  **`task`** (`String`)
+    *   An internal identifier string representing the character's *currently executing* action. Used by the game logic after the task timer completes to determine outcomes (e.g., "kill|Stegosaurus|18|plate", "buying", "market", "sell", "heading", "plot_loading"). Format "Action|TargetName if any|Qty if any|Type of Reward or \* random calc"
+
+9.  **`tasks`** (`Unsigned Integer`)
+    *   A counter accumulating the total number of discrete tasks the character has completed since creation.
+
+10. **`elapsed`** (`Unsigned Integer`)
+    *   The total in-game time elapsed, measured in seconds, accumulated from the durations of completed tasks.
+
+11. **`bestequip`** (`String`)
+    *   The display name of the most recently acquired significant piece of equipment (e.g., "+levelNum Element Material Equipment Name"). Recalculated on load/equip change.
+
+12. **`Equips`** (`Object/Dictionary`)
+    *   Maps equipment slot names (`String` keys like "Weapon", "Shield", "Helm", etc. from `EQUIPS` constant) to the name (`String` value) of the item currently equipped in that slot. An empty string signifies an empty slot.
+
+13. **`Inventory`** (`Array[Array[String, Unsigned Integer]]`)
+    *   A list representing the character's inventory. Each element is a two-item array: `[ItemName <String>, Quantity <Unsigned Integer>]`.
+    *   The list *must* always contain `["Gold", quantity]` (usually as the first element). Other elements represent various collected items (loot, quest items, etc.).
+
+14. **`Spells`** (`Array[Array[String, String]]`)
+    *   A list representing the character's known spells. Each element is a two-item array: `[SpellName <String>, Level <Roman Numeral String>]` (e.g., `["Sadness", "MDCXXXIX"]`).
+    *   The list is kept sorted alphabetically by `SpellName`.
+
+15. **`act`** (`Unsigned Integer`)
+    *   The current plot act the character is progressing through. `0` represents the Prologue, `1` is Act I, etc.
+
+16. **`bestplot`** (`String`)
+    *   A display string for the current act (e.g., "Prologue", "Act LI"). Recalculated on load/act completion from incremented `act` value to roman (e.g., 51 > "Act LI").
+
+17. **`Quests`** (`Array[String]`)
+    *   A list of quest description strings. The character works on the quest described by the *last* string in the list. The list has a fixed maximum size (e.g., 100); older quests are removed as new ones are added.
+
+18. **`questmonster`** (`String`)
+    *   An internal identifier string for the target monster of the current 'Exterminate' quest (e.g., "Stegosaurus|18|plate"). This is used internally by the game logic but is often empty in the save file if the current quest isn't an 'Exterminate' type or if the logic clears it between ticks.
+
+19. **`kill`** (`String`)
+    *   The user-facing text displayed in the UI describing the character's current action, usually ending with "..." (e.g., "Executing 5 massive Stegosauri...").
+
+20. **`ExpBar`, `EncumBar`, `PlotBar`, `QuestBar`, `TaskBar`** (`Object/Dictionary`)
+    *   Objects storing the state data for each of the main UI progress bars. They share a common structure:
+    *   `position` (`Float` for Exp, Plot, Quest; `Unsigned Integer` for Encum, Task): The current progress value.
+    *   `max` (`Unsigned Integer`): The value representing 100% completion for this bar.
+    *   `percent` (`Unsigned Integer`): The calculated progress percentage (0-100).
+    *   `remaining` (`Float` or `Unsigned Integer` matching `position`): Calculated value remaining (`max - position`).
+    *   `time` (`String`): Human-readable representation of the remaining time (used for Exp, Plot) or empty string.
+    *   `hint` (`String`): Text intended for tooltips, often summarizing the bar's status.
+
+21. **`queue`** (`Array[String]`)
+    *   A list of task strings queued for future execution, processed First-In, First-Out.
+    *   Used primarily for cinematic sequences between acts or multi-step actions.
+    *   Format: `"task_type|duration_seconds|description"` (e.g., `"task|10|Experiencing an enigmatic..."`, `"plot|2|Loading"`).
+
+22. **`date`** (`String`)
+    *   A human-readable timestamp indicating when the game was *last saved*.
+
+23. **`stamp`** (`Unsigned Integer`)
+    *   A numerical timestamp (likely milliseconds since the Unix epoch) corresponding to the last save time (`date`).
+
+24. **`saveName`** (`String`)
+    *   Defaults to the character's name, often used internally or for display related to the save file name itself. Typically identical to `Traits.Name`.
+
+25. **`bestspell`** (`String`)
+    *   A formatted string representing the character's current "best" spell based on an internal heuristic (e.g., "Spectral Miasma MCCCLIII"). Recalculated on load/spell gain.
+
+26. **`bestquest`** (`String`)
+    *   The description string of the currently active quest (copied from the last element in the `Quests` array). Recalculated on load/quest change.
+
+27. **`questmonsterindex`** (`Integer`)
+    *   The index within the game's internal `MONSTERS` list that corresponds to the target of the current 'Exterminate' quest. Value is `-1` if the current quest does not have a specific monster target from that list.
+
+### Core Algorithms & Logic
+
+*   **PRNG (`random_alea`, `Random`, `Pick`, etc.):** Alea-like pseudo-random number generation based on a mutable state array (`_alea_state`). Used for all random decisions (stat rolls, item/monster generation, choices). Must be seedable and allow state get/set for saving/loading and the Unroll feature.
+*   **Stat Rolling (`roll_stats`):** Generates 6 primary stats using 3d6 method. Calculates initial HP/MP. Determines and stores the highest rolled stat ("best"). Captures the PRNG state used for the roll.
+*   **Task Processing (`process_tick`, `process_task_completion`):** The main game loop driver. Advances the current task's progress bar. On completion, applies task effects (loot, gold, etc.), updates progression bars (XP, Quest, Plot), checks for level/quest/act completion triggers, and determines the next task based on game state (queue > encumbrance/sell > buy > kill).
+*   **Progression (`level_up`, `complete_quest`, `complete_act`):** Handle the logic for advancing levels (stat gains, spell gains, XP bar reset), completing quests (rewards, new quest generation), and advancing plot acts (rewards, plot bar reset, cinematic queueing).
+*   **Item/Monster Generation (`win_item`, `win_equip`, `monster_task`, `named_monster`):** Combine PRNG with constant lists and level-based selection logic (`_lpick`, `RandomLow`) to generate appropriate challenges and rewards. Includes applying positive/negative modifiers based on level differences.
+*   **Progress Bar Updates (`update_bar_max`, `set_bar_position`, `increment_bar`):** Calculate and update the `position`, `max`, `percent`, `remaining`, `time`, and `hint` fields within the respective bar dictionaries in `game_state`.
 
 ### Persistence
 
-*   **Save Files:** Primary state stored in `.pq` files in the application directory or user documents. Files are ZLib compressed binary streams (likely Delphi component streams).
-*   **Backup Files:** Optional `.bak` files created by renaming the previous `.pq` file.
-*   **Configuration:** Game content data (items, monsters, etc.) must be embedded within the application executable or loaded from external data files packaged with the application. (Original likely embedded in DFM resources).
-*   **Settings:** Application settings (like tray behavior, export options) potentially stored in Windows Registry or an INI file.
-
-### External Dependencies
-
-*   **Web Server:** Requires access to `http://progressquest.com` (or a compatible server) for multiplayer features (server list, character creation validation, progress reporting/bragging).
-*   **Libraries:** Standard Object Pascal runtime, VCL/LCL framework, ZLib library (like `ZLibEx.pas` provided). WinInet API or similar for HTTP communication. System Tray API.
+*   **Format:** Game state dictionary serialized to JSON, then encoded to Base64.
+*   **Storage:** Saved in individual files named `{CharacterName}.pqw` within a `./savegame` sub-directory relative to the application's execution path.
+*   **Loading:** Must handle potential missing keys in older save files by merging the loaded data into the default schema structure. Must restore the PRNG state from the save file.
 
 ## Style Guide
 
-*   **Visual:** Functional, somewhat dated Windows GUI aesthetic. Standard VCL/LCL controls. Emphasis on readability of text in lists and progress bars.
-*   **Tone:** Humorous, satirical, parodying RPG clichés in generated text (tasks, quests, items).
-*   **Layout:** Structured panel layout as described in UI section.
+*   **Visual Theme:** The application should support light and dark themes via `.qss` files located in a `./resources` sub-directory. Default themes (`dark_theme.qss`, `light_theme.qss`) should be provided. The application loads `default_theme.qss` on startup. Selecting a theme via the View menu should apply it immediately and overwrite `default_theme.qss` (after adding a standard warning comment).
+*   **Layout:** Adhere to the three-column layout described in the UI section. Use spacing and margins for a clean look (refer to `main.txt` for specific values if needed, e.g., spacing 2-4px, margins 6px). Widgets within groups should have minimal margins.
+*   **Widget Appearance:** Tables and lists should be compact. Progress bars should clearly display their text information.
 
-## Performance Goals
+## Testing Scenarios (Optional)
 
-*   Low CPU usage when idle or minimized. Timer interval should be reasonable (e.g., 100ms as in original).
-*   Efficient handling of large lists (inventory, spells) although practical limits are unlikely to be hit in normal gameplay.
-*   Network requests should be handled without freezing the UI (asynchronous if possible, though original might have been blocking).
-
-## Accessibility Requirements
-
-*   Basic keyboard navigation for controls (Tab, Enter).
-*   Adherence to system color/font settings where possible. (Likely poor accessibility in the original, aim for standard control behavior).
-
-## Testing Scenarios
-
-*   Character creation completes successfully (Single/Multiplayer).
-*   Game loads correctly from a saved `.pq` file.
-*   Game saves correctly on exit.
-*   Character levels up after appropriate time/XP gain.
-*   Stats, HP/MP increase on level up.
-*   Spells are learned on level up.
-*   Quests are assigned, progress, and complete, granting rewards.
-*   Plot acts progress and complete.
-*   Equipment is automatically upgraded over time.
-*   Inventory fills, character goes to market, inventory clears (except gold).
-*   Encumbrance bar reflects inventory status.
-*   Multiplayer: Realm list fetches, character creation succeeds (if applicable), "Brag" calls are sent periodically without error.
-*   Minimize to tray and restore works correctly.
-*   Character sheet export produces readable text output.
+*   Verify character creation allows rolling, unrolling, race/class selection, and saving.
+*   Confirm saving and loading accurately preserves all aspects of the game state, including PRNG state.
+*   Observe automatic progression: XP gain leads to level up, quest completion leads to new quests, plot completion leads to new acts.
+*   Ensure inventory updates correctly when items are gained (loot, rewards) and lost (selling).
+*   Check that encumbrance fills, triggers selling behavior, and selling correctly adds gold and removes items.
+*   Verify equipment changes automatically when better items are generated via `win_equip` or buying.
+*   Confirm spells are learned and leveled up correctly.
+*   Test theme selection applies the chosen theme and updates the default.
+*   Ensure the UI accurately reflects the underlying `game_state` after each tick.

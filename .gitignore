@@ -9,8 +9,8 @@ vs.code-workspace
 !requirements.txt
 backup/
 obsolete/
-*.bak
-*.pq
+resources/default_theme.qss
+savegame/*.pqw
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

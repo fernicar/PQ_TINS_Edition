@@ -20,8 +20,7 @@ This version focuses on replicating the core single-player experience with a dar
     *   **Economy & Inventory:** Collect gold and items (both boring and special). Automatically travels to market to sell loot when encumbered. Automatically attempts to buy better equipment when affordable.
     *   **Equipment:** Automatically generated equipment is equipped based on character level progression and quest/act rewards.
 *   **Persistent State:** Game saves automatically on exit and loads the most recent save on startup.
-    *   Uses `pickle` and `zlib` compression (`.pq` files).
-    *   Automatic backup (`.bak`) creation on save.
+    *   Uses the web version savegame format (`.pqw` files).
     *   Window position and size remembered using `QSettings`.
 *   **Dark Mode UI:** Built with PySide6, featuring a default dark theme for comfortable viewing during long progress sessions.
 *   **Offline Focus:** This version does *not* include the original's multiplayer features (server communication, bragging, realm selection).
@@ -30,11 +29,11 @@ This version focuses on replicating the core single-player experience with a dar
 
 **Main Window:**
 `[Screenshot showing the three main panels: Character, Equipment/Inventory, Plot/Quests, and the bottom status/task bars]`
-![app_capture0](https://github.com/fernicar/PQ_TINS_Edition/images/blob/main/app_capture0.png)
+![app_capture0](https://github.com/fernicar/PQ_TINS_Edition/blob/main/images/app_capture0.png)
 
 **Character Creation:**
 `[Screenshot showing the character creation dialog with name, race/class selection, and stats]`
-![app_capture1](https://github.com/fernicar/PQ_TINS_Edition/images/blob/main/app_capture1.png)
+![app_capture1](https://github.com/fernicar/PQ_TINS_Edition/blob/main/images/app_capture1.png)
 
 ## Getting Started
 
@@ -45,26 +44,20 @@ This version focuses on replicating the core single-player experience with a dar
 
 ### Installation & Running
 
-1.  **Clone or Download:** Get the source code files (`config_data.py`, `game_logic.py`, `character_dialog.py`, `main_window.py`).
+1.  **Clone or Download:**
     ```bash
     git clone https://github.com/fernicar/PQ_TINS_Edition.git
     cd PQ_TINS_Edition
     ```
-    (Or download and extract the ZIP)
 
-2.  **Create `requirements.txt`:** Create a file named `requirements.txt` in the same directory with the following content:
-    ```txt
-    PySide6
+2.  **Install Dependencies:**
+    ```bash
+    pip install PySide6
     ```
 
-3.  **Install Dependencies:** Open a terminal or command prompt in the project directory and run:
+3.  **Run the Game:**
     ```bash
-    pip install -r requirements.txt
-    ```
-
-4.  **Run the Game:** Execute the main script from your terminal:
-    ```bash
-    python main_window.py
+    python main.py
     ```
 
 ## Technology Stack
@@ -77,20 +70,36 @@ This version focuses on replicating the core single-player experience with a dar
 
 ## File Structure
 
-*   `config_data.py`: Holds static game data (items, monsters, spells, races, classes, etc.), helper functions (`plural`, `int_to_roman`), and the UI stylesheet.
-*   `game_logic.py`: Contains the `GameLogic` class, encapsulating the character state, game rules, and the core automatic progression logic (tick loop).
-*   `character_dialog.py`: Implements the `NewCharacterDialog` window for creating new characters.
-*   `main_window.py`: The main application file, setting up the PySide6 UI (`MainWindow`), managing the game timer, handling saving/loading, and connecting the UI to the `GameLogic`.
-*   `requirements.txt`: Lists the necessary Python packages (`PySide6`).
+*   `main.py`: The main application file, setting up the PySide6 UI (`MainWindow`), managing the game timer, handling saving/loading, and connecting the UI to the game logic.
+*   `game.py`: Core game logic including character creation, state management, save/load functionality, and game progression mechanics.
+*   `resources/`: Directory containing theme files (dark_theme.qss, default_theme.qss)
 
 ## Saving and Loading
 
-*   The game automatically attempts to load the most recent save file (`.pq`) found on startup. It checks the path stored in settings first, then the application/working directory.
+*   The game automatically attempts to load the most recent `.pqw` file found on startup.
 *   If no save is found, it prompts for new character creation.
-*   The game state is saved automatically when you close the application. You can also manually save using `File -> Save Game`.
-*   Save files (`.pq`) are Python `pickle` data compressed with `zlib`.
-*   A backup (`.bak`) of the previous save is created automatically during the save process.
-*   Window size, position, and splitter layout are saved using `QSettings` and restored on the next launch.
+*   The game state is saved automatically:
+    * Every minute during gameplay
+    * When closing the application
+    * When creating a new character
+    * Manually through `File -> Save Game`
+*   Save files use the `.pqw` format with the character's name (e.g., `CharacterName.pqw`)
+*   Window size and position are saved using `QSettings`
+
+## Technical Details
+
+*   **Python:** Port of the original web version (HTML/JavaScript) logic to Python
+*   **UI:** Built with PySide6, using QSS for styling and QSettings for window geometry
+*   **Game Loop:** Uses QTimer with 50ms interval (matches original clock.js)
+*   **Auto-Save:** Occurs every 60 seconds during gameplay
+*   **Theme System:** 
+    * Uses QSS stylesheets stored in `resources/` directory
+    * Default dark theme is automatically created if missing
+*   **Save Format:** Uses JSON format with base64 encoding
+*   **State Management:**
+    * Maintains PRNG state for consistent random generation
+    * Tracks character stats, inventory, spells, quests, and plot progression
+    * Automatically calculates "best" stats/spells/equipment
 
 ## Contributing
 
@@ -103,7 +112,7 @@ This project is licensed under the MIT License - see the [LICENSE](https://githu
 ## Acknowledgments
 
 *   Special thanks to ScuffedEpoch for the [TINS](https://github.com/ScuffedEpoch/TINS) methodology and the initial example.
-*   Thanks to Eric Fredricksen and the original [ProgressQuest](https://bitbucket.org/grumdrig/pq/src/master/) project contributors for the original game – you are a legend.
+*   Thanks to Eric Fredricksen and the original [Progress Quest Web](https://bitbucket.org/grumdrig/pq-web) project contributors for the original game – you are a legend.
 *   Thanks to the PySide6 development team and community for their libraries and documentation.
 *   *(Your mention of AI assistants and VS Code extensions is fine here too if you wish to keep it)*
     *   Thanks to the AI assistants used during development for their contributions.

@@ -1,0 +1,234 @@
+/* Basic Dark Theme for Progress Quest */
+QWidget {
+    background-color: #2e2e2e;
+    color: #e0e0e0;
+    font-family: Tahoma, Helvetica, sans-serif;
+    font-size: 9pt;
+}
+
+/* Dark mode tooltips */
+QToolTip {
+    background-color: #444444;
+    color: #ffffff;
+    border: 1px solid #666666;
+    padding: 2px;
+    font-size: 9pt;
+}
+
+QMainWindow, QDialog {
+    background-color: #2e2e2e;
+}
+
+QGroupBox {
+    background-color: #3c3c3c;
+    border: 1px solid #555;
+    border-radius: 4px;
+    margin-top: 1ex; /* spacing */
+    font-weight: bold;
+}
+
+QGroupBox::title {
+    subcontrol-origin: margin;
+    subcontrol-position: top left; /* position at the top center */
+    padding: 0 3px;
+    background-color: #3c3c3c;
+    color: #e0e0e0;
+}
+
+
+QLabel {
+    background-color: transparent; /* Labels inside group boxes shouldn't override */
+}
+
+QPushButton {
+    background-color: #555;
+    color: #e0e0e0;
+    border: 1px solid #666;
+    padding: 5px;
+    min-width: 70px;
+    border-radius: 3px;
+}
+
+QPushButton:hover {
+    background-color: #666;
+    border: 1px solid #777;
+}
+
+QPushButton:pressed {
+    background-color: #444;
+}
+
+QPushButton:disabled {
+    background-color: #404040;
+    color: #888;
+    border: 1px solid #555;
+}
+
+
+QLineEdit {
+    background-color: #444;
+    border: 1px solid #555;
+    padding: 3px;
+    border-radius: 3px;
+    color: #e0e0e0;
+}
+
+QTableWidget {
+    background-color: #383838;
+    border: 1px solid #555;
+    gridline-color: #555;
+    color: #e0e0e0; /* Text color for items */
+}
+
+QTableWidget::item {
+     padding: 3px;
+}
+
+QTableWidget::item:selected {
+    background-color: #003887; /* Selection color */
+    color: #ffffff;
+}
+
+/* No hover effect for main game tables */
+.MainWindow QTableWidget::item:hover {
+    background-color: transparent;
+    color: #e0e0e0;
+}
+
+
+QHeaderView::section {
+    background-color: #484848;
+    color: #e0e0e0;
+    padding: 2px 4px; /* Reduced vertical padding */
+    border: 1px solid #555;
+    font-weight: bold;
+    font-size: 9pt; /* Slightly smaller font for headers */
+}
+
+QProgressBar {
+    border: 1px solid #555;
+    border-radius: 3px;
+    text-align: center;
+    background-color: #444;
+    color: #e0e0e0; /* Text on progress bar */
+    height: 14px; /* Match JS */
+}
+
+QProgressBar::chunk {
+    background-color: #003887; /* Blue progress */
+    border-radius: 2px;
+    margin: 0.5px;
+}
+
+QScrollBar:vertical {
+    border: 1px solid #555;
+    background: #3c3c3c;
+    width: 15px;
+    margin: 15px 0 15px 0;
+    border-radius: 0px;
+}
+
+QScrollBar::handle:vertical {
+    background: #666;
+    min-height: 20px;
+    border-radius: 0px;
+}
+
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+    border: 1px solid #555;
+    background: #484848;
+    height: 14px;
+    subcontrol-position: top;
+    subcontrol-origin: margin;
+}
+
+QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {
+    background: none;
+}
+
+
+QScrollBar:horizontal {
+     border: 1px solid #555;
+     background: #3c3c3c;
+     height: 15px;
+     margin: 0px 15px 0 15px;
+     border-radius: 0px;
+}
+QScrollBar::handle:horizontal {
+    background: #666;
+    min-width: 20px;
+    border-radius: 0px;
+}
+QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {
+    border: 1px solid #555;
+    background: #484848;
+    width: 14px;
+    border-radius: 0px;
+    subcontrol-position: right;
+    subcontrol-origin: margin;
+}
+QScrollBar::add-page:horizontal, QScrollBar::sub-page:horizontal {
+     background: none;
+}
+
+QRadioButton {
+    background-color: transparent;
+}
+
+QListWidget {
+    background-color: #383838;
+    border: 1px solid #555;
+    color: #e0e0e0;
+}
+
+QListWidget::item:selected {
+    background-color: #003887;
+    color: #ffffff;
+}
+
+/* No hover effect for main game lists */
+.MainWindow QListWidget::item:hover {
+    background-color: transparent;
+    color: #e0e0e0;
+}
+
+/* Menu styling */
+QMenuBar {
+    background-color: #2e2e2e;
+    color: #e0e0e0;
+}
+
+QMenuBar::item {
+    background: transparent;
+    padding: 4px 8px;
+}
+
+QMenuBar::item:selected {
+    background: #2e2e2e;
+    color: #ffffff;
+}
+
+QMenuBar::item:pressed {
+    background: #003887;
+    color: #ffffff;
+}
+
+QMenu {
+    background-color: #2e2e2e;
+    border: 1px solid #555555;
+    color: #e0e0e0;
+}
+
+QMenu::item {
+    padding: 4px 20px 4px 20px;
+}
+
+QMenu::item:selected {
+    background-color: #444444;
+    color: #ffffff;
+}
+
+QMenu::item:pressed {
+    background-color: #003887;
+    color: #ffffff;
+}
