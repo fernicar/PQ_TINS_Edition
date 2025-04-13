@@ -1,24 +1,25 @@
 # START OF FILE: character_dialog.py
 # File: character_dialog.py
 import sys
-import random
+# No random import needed here anymore, using game RNG
+
 from PySide6.QtWidgets import (
     QApplication, QDialog, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit,
     QComboBox, QPushButton, QGroupBox, QGridLayout, QSizePolicy, QSpacerItem
 )
 from PySide6.QtCore import Qt, Slot
-from PySide6.QtGui import QFontMetrics
-from config_data import RACES, KLASSES, DARK_STYLESHEET, generate_name
+from PySide6.QtGui import QFontMetrics, QFont
+# Import RNG and config data
+from config_data import RACES, KLASSES, DARK_STYLESHEET, generate_name, randseed, Random
 
 class NewCharacterDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Progress Quest - New Character")
         self.setMinimumWidth(500)
-        # self.setModal(True) # Make it modal
 
         self.layout = QVBoxLayout(self)
-        self.layout.setSpacing(10) # Add spacing between elements
+        self.layout.setSpacing(10)
 
         # --- Name ---
         name_layout = QHBoxLayout()
@@ -26,7 +27,10 @@ class NewCharacterDialog(QDialog):
         self.name_edit = QLineEdit()
         self.name_edit.setMaxLength(30)
         self.gen_name_button = QPushButton("?")
-        self.gen_name_button.setFixedSize(self.gen_name_button.sizeHint().height(), self.gen_name_button.sizeHint().height()) # Square button
+        # Calculate button size based on font metrics
+        fm_button = QFontMetrics(self.gen_name_button.font())
+        button_height = fm_button.height() + 8 # Add some padding
+        self.gen_name_button.setFixedSize(button_height, button_height) # Square button
         self.gen_name_button.setToolTip("Generate random name")
         self.gen_name_button.clicked.connect(self.generate_random_name)
         name_layout.addWidget(name_label)
@@ -43,7 +47,8 @@ class NewCharacterDialog(QDialog):
         self.race_combo = QComboBox()
         self.race_combo.addItems(RACES.keys())
         fm = QFontMetrics(self.race_combo.font())
-        max_width = max(fm.horizontalAdvance(race) for race in RACES.keys()) + 40 # Add padding
+        # Adjust width calculation for padding
+        max_width = max(fm.horizontalAdvance(race) for race in RACES.keys()) + fm.horizontalAdvance(" ") * 4 + 30 # Ensure space for dropdown arrow + padding
         self.race_combo.setMinimumWidth(max_width)
         race_layout.addWidget(self.race_combo)
         self.race_group.setLayout(race_layout)
@@ -53,7 +58,7 @@ class NewCharacterDialog(QDialog):
         class_layout = QVBoxLayout()
         self.class_combo = QComboBox()
         self.class_combo.addItems(KLASSES.keys())
-        max_width = max(fm.horizontalAdvance(klass) for klass in KLASSES.keys()) + 40 # Add padding
+        max_width = max(fm.horizontalAdvance(klass) for klass in KLASSES.keys()) + fm.horizontalAdvance(" ") * 4 + 30 # Ensure space for dropdown arrow + padding
         self.class_combo.setMinimumWidth(max_width)
         class_layout.addWidget(self.class_combo)
         self.class_group.setLayout(class_layout)
@@ -69,6 +74,7 @@ class NewCharacterDialog(QDialog):
         self.stat_labels = {}
         self.stat_values = {}
         self.current_stats = {} # Store the actual integer values
+        self.stat_seeds = []    # Store RNG seeds for unroll
         self.stat_order = ["STR", "CON", "DEX", "INT", "WIS", "CHA"]
 
         for i, stat_name in enumerate(self.stat_order):
@@ -85,6 +91,12 @@ class NewCharacterDialog(QDialog):
         self.total_value = QLabel("60")
         self.total_value.setObjectName("StatValueLabel")
         self.total_value.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        # Make total value bold for emphasis
+        total_font = self.total_value.font()
+        total_font.setBold(True)
+        self.total_value.setFont(total_font)
+        self.total_label.setFont(total_font) # Make label bold too
+
         stats_layout.addWidget(self.total_label, len(self.stat_order), 0)
         stats_layout.addWidget(self.total_value, len(self.stat_order), 1)
 
@@ -96,11 +108,12 @@ class NewCharacterDialog(QDialog):
         self.roll_button.clicked.connect(self.roll_stats)
         stats_layout.addWidget(self.roll_button, len(self.stat_order) + 2, 0, 1, 2)
 
-        # Note: Unroll button logic requires storing previous rolls, skipped for simplicity
-        # self.unroll_button = QPushButton("Unroll")
-        # self.unroll_button.setEnabled(False)
-        # self.unroll_button.clicked.connect(self.unroll_stats)
-        # stats_layout.addWidget(self.unroll_button, len(self.stat_order) + 3, 0, 1, 2)
+        # Unroll button logic
+        self.unroll_button = QPushButton("Unroll")
+        self.unroll_button.setToolTip("Revert to previous stats roll")
+        self.unroll_button.setEnabled(False)
+        self.unroll_button.clicked.connect(self.unroll_stats)
+        stats_layout.addWidget(self.unroll_button, len(self.stat_order) + 3, 0, 1, 2)
 
         self.stats_group.setLayout(stats_layout)
         selection_layout.addWidget(self.stats_group, 0) # No stretch factor for stats
@@ -127,45 +140,86 @@ class NewCharacterDialog(QDialog):
 
     @Slot()
     def generate_random_name(self):
+        """Generates a random name using the game's logic."""
         self.name_edit.setText(generate_name())
 
-    def roll_d6(self):
-        return random.randint(1, 6)
+    def _update_stats_display(self):
+        """Helper to update labels and total from self.current_stats."""
+        total = 0
+        best_stat_name = None
+        best_stat_value = -1
+        for stat_name in self.stat_order:
+            val = self.current_stats.get(stat_name, 0)
+            self.stat_values[stat_name].setText(str(val))
+            total += val
+            if val > best_stat_value:
+                best_stat_value = val
+                best_stat_name = stat_name
+            elif val == best_stat_value: # Handle ties? JS version seems to just take the last one.
+                 best_stat_name = stat_name
+
+        self.total_value.setText(str(total))
+        self.current_stats["best"] = best_stat_name if best_stat_name else "" # Store best stat name
+
+        # Update total color based on JS logic
+        self.total_value.setStyleSheet("") # Reset first
+        if total >= (63 + 18): self.total_value.setStyleSheet("background-color: red;")
+        elif total > (4 * 18): self.total_value.setStyleSheet("background-color: yellow; color: black;") # Need black text on yellow
+        elif total <= (63 - 18): self.total_value.setStyleSheet("background-color: grey;")
+        elif total < (3 * 18): self.total_value.setStyleSheet("background-color: silver; color: black;") # Need black text on silver
+
+        # Enable/disable unroll button
+        self.unroll_button.setEnabled(bool(self.stat_seeds))
+
+    def _roll_3d6(self):
+        """Rolls 3d6 using the game's Random function."""
+        return Random(6) + Random(6) + Random(6) + 3 # Random(6) gives 0-5, add 1 for each die = +3
 
     @Slot()
     def roll_stats(self):
-        """Rolls 3d6 for each stat and updates the display."""
-        total = 0
-        # self.previous_stats = self.current_stats.copy() # Store for unroll if needed
+        """Rolls 3d6 for each stat using game RNG and updates the display."""
+        # Store current seed *before* rolling new stats
+        current_seed = randseed()
+        if current_seed: # Don't store initial None seed if there was one
+             self.stat_seeds.append(current_seed)
+             # Limit history depth if desired
+             if len(self.stat_seeds) > 20:
+                  self.stat_seeds.pop(0)
+
+        new_seed = randseed() # Get the *next* seed state for these rolls
+        self.current_stats["seed"] = new_seed # Store seed associated with *these* stats
+
         for stat_name in self.stat_order:
-            roll_value = self.roll_d6() + self.roll_d6() + self.roll_d6()
-            self.stat_values[stat_name].setText(str(roll_value))
+            roll_value = self._roll_3d6()
             self.current_stats[stat_name] = roll_value
-            total += roll_value
-        self.total_value.setText(str(total))
 
-        # Reset style, then apply new style based on total
-        self.total_value.setStyleSheet("") # Reset first
-        if total >= (63 + 18): self.total_value.setStyleSheet("color: #FF6B6B;") # Bright Red
-        elif total > (4 * 18): self.total_value.setStyleSheet("color: #FFD966;") # Yellow
-        elif total <= (63 - 18): self.total_value.setStyleSheet("color: #A0A0A0;") # Grey
-        elif total < (3 * 18): self.total_value.setStyleSheet("color: #C0C0C0;") # Silver
-        # else: no specific style for average rolls
+        # HP/MP Max calculation (matches newguy.js logic)
+        self.current_stats['HP Max'] = Random(8) + 1 + (self.current_stats.get("CON", 0) // 6)
+        self.current_stats['MP Max'] = Random(8) + 1 + (self.current_stats.get("INT", 0) // 6)
 
-        # self.unroll_button.setEnabled(bool(self.previous_stats)) # Enable if there's something to unroll
+        self._update_stats_display()
 
-    # def unroll_stats(self): # Example if unroll was implemented
-    #     if self.previous_stats:
-    #         total = 0
-    #         self.current_stats = self.previous_stats.copy()
-    #         for stat_name in self.stat_order:
-    #             val = self.current_stats.get(stat_name, 0)
-    #             self.stat_values[stat_name].setText(str(val))
-    #             total += val
-    #         self.total_value.setText(str(total))
-    #         # Reset/apply style for total_value
-    #         self.previous_stats = {} # Clear previous roll after unrolling
-    #         self.unroll_button.setEnabled(False)
+    @Slot()
+    def unroll_stats(self):
+        """Reverts to the previous stat roll using the saved seed."""
+        if self.stat_seeds:
+            # Restore the previous seed state
+            previous_seed = self.stat_seeds.pop()
+            randseed(previous_seed) # Set the RNG state back
+
+            # Re-roll using the restored seed state
+            self.current_stats["seed"] = previous_seed # Store seed associated with *these* stats
+            for stat_name in self.stat_order:
+                 roll_value = self._roll_3d6()
+                 self.current_stats[stat_name] = roll_value
+
+            # HP/MP Max calculation
+            self.current_stats['HP Max'] = Random(8) + 1 + (self.current_stats.get("CON", 0) // 6)
+            self.current_stats['MP Max'] = Random(8) + 1 + (self.current_stats.get("INT", 0) // 6)
+
+            self._update_stats_display()
+        else:
+             self.unroll_button.setEnabled(False) # Should be disabled anyway, but be sure
 
 
     def get_character_data(self):
@@ -173,12 +227,19 @@ class NewCharacterDialog(QDialog):
         if self.result() == QDialog.DialogCode.Accepted:
             name_text = self.name_edit.text().strip()
             if not name_text: # Ensure name is not empty
-                name_text = "Adventurer"
+                name_text = generate_name() # Generate one if empty
+
+            # Ensure required stats are present, even if 0
+            for stat in self.stat_order + ["HP Max", "MP Max", "seed", "best"]:
+                 if stat not in self.current_stats:
+                      self.current_stats[stat] = 0 if stat not in ["seed", "best"] else ([] if stat=="seed" else "")
+
+
             return {
                 "name": name_text,
                 "race": self.race_combo.currentText(),
                 "class": self.class_combo.currentText(),
-                "stats": self.current_stats.copy() # Return a copy
+                "stats": self.current_stats.copy() # Return a copy, includes HP/MP/seed/best
             }
         return None
 

@@ -1,19 +1,121 @@
 # START OF FILE: config_data.py
 # File: config_data.py
 # Holds the game configuration data, similar to Config.pas/Config.dfm
-import random
 import math
 import re
-import time # Keep time import here if needed by helpers
+import time
+import datetime # For timestamps
+import sys
 
-# --- Game Content Data ---
+# ----------------------------------------------------------------------------
+# Alea PRNG Port (Based on Johannes Baagøe's JavaScript implementation)
+# ----------------------------------------------------------------------------
+class Mash:
+    def __init__(self):
+        self.n = 0xefc8249d
+
+    def mash(self, data):
+        data_str = str(data)
+        for char in data_str:
+            self.n += ord(char)
+            h = 0.02519603282416938 * self.n
+            self.n = int(h) & 0xffffffff # Use unsigned 32-bit int directly
+            h -= self.n
+            h *= self.n
+            self.n = int(h) & 0xffffffff
+            h -= self.n
+            self.n += int(h * 0x100000000) # 2^32
+        # Ensure result is a non-negative float between 0 and 1
+        return (self.n & 0xffffffff) * 2.3283064365386963e-10 # 2^-32
+
+class Alea:
+    def __init__(self, *args):
+        self.s0 = 0
+        self.s1 = 0
+        self.s2 = 0
+        self.c = 1
+        self.args = args if args else [time.time()] # Use current time if no seed
+
+        mash_instance = Mash()
+        self.s0 = mash_instance.mash(' ')
+        self.s1 = mash_instance.mash(' ')
+        self.s2 = mash_instance.mash(' ')
+
+        for arg in self.args:
+            self.s0 -= mash_instance.mash(arg)
+            if self.s0 < 0: self.s0 += 1
+            self.s1 -= mash_instance.mash(arg)
+            if self.s1 < 0: self.s1 += 1
+            self.s2 -= mash_instance.mash(arg)
+            if self.s2 < 0: self.s2 += 1
+
+    def random(self):
+        t = 2091639 * self.s0 + self.c * 2.3283064365386963e-10 # 2^-32
+        self.s0 = self.s1
+        self.s1 = self.s2
+        # Ensure c remains within integer bounds if possible, or handle potential overflow
+        # The JS `t | 0` performs a ToInt32 operation.
+        c_int = int(t) # Truncate towards zero
+        self.c = c_int
+        self.s2 = t - self.c
+        # Return value should be in [0, 1)
+        return self.s2
+
+    def uint32(self):
+        # In JS `random() * 0x100000000` might exceed standard float precision
+        # but ultimately gets treated as a 32-bit unsigned int.
+        # We can simulate this by scaling and taking the integer part modulo 2^32.
+        val = int(self.random() * (2**32))
+        return val & 0xFFFFFFFF # Ensure it's treated as unsigned 32-bit
+
+    def fract53(self):
+        # High precision fraction using two calls
+        return self.random() + (int(self.random() * 0x200000) & 0xFFFFFFFF) * 1.1102230246251565e-16 # 2^-53
+
+    def state(self, newstate=None):
+        if newstate and len(newstate) == 4:
+            # Handle potential type issues if loading from JSON (floats vs ints)
+            self.s0 = float(newstate[0])
+            self.s1 = float(newstate[1])
+            self.s2 = float(newstate[2])
+            self.c = float(newstate[3]) # c can be float in calculation, though JS truncates
+        # Return state as a list of floats for JSON compatibility
+        return [float(self.s0), float(self.s1), float(self.s2), float(self.c)]
+
+# Global RNG instance
+_alea_instance = Alea() # Initialize with default seed (time)
+
+def randseed(set_value=None):
+    """Gets or sets the current state of the global Alea PRNG."""
+    global _alea_instance
+    if set_value is not None:
+         # If setting, ensure it's a valid state list/tuple
+         if isinstance(set_value, (list, tuple)) and len(set_value) == 4:
+              _alea_instance.state(set_value)
+         else:
+              # If not a valid state, assume it's a seed value and re-initialize
+              print(f"Warning: Invalid RNG state provided: {set_value}. Re-seeding.")
+              _alea_instance = Alea(set_value)
+    # Always return the current state
+    return _alea_instance.state()
+
+
+def Random(n):
+    """Generate a random integer between 0 and n-1 (inclusive)."""
+    if n <= 0: return 0
+    return _alea_instance.uint32() % n
+
+# ----------------------------------------------------------------------------
+
+# --- Game Content Data (Aligned with config.js where possible) ---
 
 RACES = {
+    # Name: {bonuses: [list_of_bonuses]}
     "Half Orc": {"bonuses": ["HP Max"]},
     "Half Man": {"bonuses": ["CHA"]},
     "Half Halfling": {"bonuses": ["DEX"]},
     "Double Hobbit": {"bonuses": ["STR"]},
-    "Hob-Hobbit": {"bonuses": ["DEX", "CON"]}, # Corrected name based on DFM
+    "Hob-Hobbit": {"bonuses": ["DEX", "CON"]},
     "Low Elf": {"bonuses": ["CON"]},
     "Dung Elf": {"bonuses": ["WIS"]},
     "Talking Pony": {"bonuses": ["MP Max", "INT"]},
@@ -23,8 +125,8 @@ RACES = {
     "Eel Man": {"bonuses": ["DEX"]},
     "Panda Man": {"bonuses": ["CON", "STR"]},
     "Trans-Kobold": {"bonuses": ["WIS"]},
-    "Enchanted Motorcycle": {"bonuses": ["MP Max"]},
-    "Will o' the Wisp": {"bonuses": ["WIS"]},
+    "Enchanted Motorcycle": {"bonuses": ["MP Max"]}, # Originally Bonus=MPMax
+    "Will o' the Wisp": {"bonuses": ["WIS"]}, # Originally Bonus=WIS
     "Battle-Finch": {"bonuses": ["DEX", "INT"]},
     "Double Wookiee": {"bonuses": ["STR"]},
     "Skraeling": {"bonuses": ["WIS"]},
@@ -33,6 +135,7 @@ RACES = {
 }
 
 KLASSES = {
+    # Name: {bonuses: [list_of_bonuses]}
     "Ur-Paladin": {"bonuses": ["WIS", "CON"]},
     "Voodoo Princess": {"bonuses": ["INT", "CHA"]},
     "Robot Monk": {"bonuses": ["STR"]},
@@ -48,21 +151,25 @@ KLASSES = {
     "Tickle-Mimic": {"bonuses": ["WIS", "INT"]},
     "Slow Poisoner": {"bonuses": ["CON"]},
     "Bastard Lunatic": {"bonuses": ["CON"]},
-    "Jungle Clown": {"bonuses": ["DEX", "CHA"]},
+    # "Lowling": {"bonuses": ["WIS"]}, # Missing from original Python, present in JS
+    "Jungle Clown": {"bonuses": ["DEX", "CHA"]}, # Present in Python, missing from JS
     "Birdrider": {"bonuses": ["WIS"]},
     "Vermineer": {"bonuses": ["INT"]},
 }
 
+# Use tuples (Name, Level) matching Python structure but data from JS
 WEAPONS = [
     ("Stick", 0), ("Broken Bottle", 1), ("Shiv", 1), ("Sprig", 1), ("Oxgoad", 1),
     ("Eelspear", 2), ("Bowie Knife", 2), ("Claw Hammer", 2), ("Handpeen", 2),
     ("Andiron", 3), ("Hatchet", 3), ("Tomahawk", 3), ("Hackbarm", 3),
-    ("Crowbar", 4), ("Mace", 4), ("Battleadze", 4), ("Leafmace", 5),
-    ("Shortsword", 5), ("Longiron", 5), ("Poachard", 5), ("Baselard", 5),
+    ("Crowbar", 4), ("Mace", 4), ("Battleadze", 4),
+    ("Leafmace", 5), ("Shortsword", 5), ("Longiron", 5), ("Poachard", 5), ("Baselard", 5),
     ("Whinyard", 6), ("Blunderbuss", 6), ("Longsword", 6), ("Crankbow", 6),
-    ("Blibo", 7), ("Broadsword", 7), ("Kreen", 7), ("Morning Star", 8),
-    ("Pole-adze", 8), ("Spontoon", 8), ("Bastard Sword", 9), ("Peen-arm", 9),
-    ("Culverin", 10), ("Lance", 10), ("Halberd", 11), ("Poleax", 12),
+    ("Blibo", 7), ("Broadsword", 7), ("Kreen", 7), ("Warhammer", 7), # Warhammer from JS
+    ("Morning Star", 8), ("Pole-adze", 8), ("Spontoon", 8),
+    ("Bastard Sword", 9), ("Peen-arm", 9),
+    ("Culverin", 10), ("Lance", 10),
+    ("Halberd", 11), ("Poleax", 12),
     ("Bandyclef", 15),
 ]
 
@@ -82,6 +189,7 @@ SHIELDS = [
     ("Magnetic Field", 18),
 ]
 
+# Use tuples (Name, Modifier)
 OFFENSE_ATTRIB = [
     ("Polished", 1), ("Serrated", 1), ("Heavy", 1), ("Pronged", 2), ("Steely", 2),
     ("Vicious", 3), ("Venomed", 4), ("Stabbity", 4), ("Dancing", 5),
@@ -104,31 +212,34 @@ DEFENSE_BAD = [
     ("Cursed", -5), ("Plastic", -4), ("Cracked", -4), ("Warped", -3), ("Corroded", -3),
 ]
 
-SPELLS = [
+SPELLS = [ # From JS config.js, slightly different than original Python
     'Slime Finger', 'Rabbit Punch', 'Hastiness', 'Good Move', 'Sadness',
     'Seasick', 'Shoelaces', 'Inoculate', 'Cone of Annoyance', 'Magnetic Orb',
     'Invisible Hands', 'Revolting Cloud', 'Aqueous Humor', 'Spectral Miasma',
     'Clever Fellow', 'Lockjaw', 'History Lesson', 'Hydrophobia', 'Big Sister',
     'Cone of Paste', 'Mulligan', "Nestor's Bright Idea", 'Holy Batpole',
-    'Tumor (Benign)', 'Braingate', 'Nonplus', 'Animate Nightstand',
+    'Tumor (Benign)', 'Braingate', #'Summon a Bitch', # Excluded from JS, originally in C++? Keep excluded.
+    'Nonplus', 'Animate Nightstand',
     'Eye of the Troglodyte', 'Curse Name', 'Dropsy', 'Vitreous Humor',
-    "Roger's Grand Illusion", 'Covet', 'Astral Miasma', 'Spectral Oyster',
+    "Roger's Grand Illusion", 'Covet', #'Black Idaho', # Excluded from JS
+    'Astral Miasma', 'Spectral Oyster',
     'Acrid Hands', 'Angioplasty', "Grognor's Big Day Off", 'Tumor (Malignant)',
     'Animate Tunic', 'Ursine Armor', 'Holy Roller', 'Tonsillectomy',
     'Curse Family', 'Infinite Confusion',
 ]
 
-BORING_ITEMS = [
+
+BORING_ITEMS = [ # From JS config.js
     'nail', 'lunchpail', 'sock', 'I.O.U.', 'cookie', 'pint', 'toothpick',
     'writ', 'newspaper', 'letter', 'plank', 'hat', 'egg', 'coin', 'needle',
     'bucket', 'ladder', 'chicken', 'twig', 'dirtclod', 'counterpane',
     'vest', 'teratoma', 'bunny', 'rock', 'pole', 'carrot', 'canoe',
     'inkwell', 'hoe', 'bandage', 'trowel', 'towel', 'planter box',
     'anvil', 'axle', 'tuppence', 'casket', 'nosegay', 'trinket',
-    'credenza', 'writ', # Writ appears twice in original
+    'credenza', 'writ', # Writ appears twice in JS as well
 ]
 
-SPECIALS = [ # Base name for special items
+SPECIALS = [ # Base name for special items (From JS)
     'Diadem', 'Festoon', 'Gemstone', 'Phial', 'Tiara', 'Scabbard', 'Arrow',
     'Lens', 'Lamp', 'Hymnal', 'Fleece', 'Laurel', 'Brooch', 'Gimlet',
     'Cobble', 'Albatross', 'Brazier', 'Bandolier', 'Tome', 'Garnet',
@@ -137,7 +248,7 @@ SPECIALS = [ # Base name for special items
     'Spangle', 'Gimcrack', 'Hood', 'Vulpeculum',
 ]
 
-ITEM_ATTRIB = [ # Prefixes for special items
+ITEM_ATTRIB = [ # Prefixes for special items (From JS)
     'Golden', 'Gilded', 'Spectral', 'Astral', 'Garlanded', 'Precious',
     'Crafted', 'Dual', 'Filigreed', 'Cruciate', 'Arcane', 'Blessed',
     'Reverential', 'Lucky', 'Enchanted', 'Gleaming', 'Grandiose', 'Sacred',
@@ -146,11 +257,12 @@ ITEM_ATTRIB = [ # Prefixes for special items
     'Unearthly', 'Magnificent', 'Iron', 'Ormolu', 'Puissant',
 ]
 
-ITEM_OFS = [ # Suffixes for special items ("of X")
+ITEM_OFS = [ # Suffixes for special items ("of X") (From JS)
     'Foreboding', 'Foreshadowing', 'Nervousness', 'Happiness', 'Torpor',
     'Danger', 'Craft', 'Silence', 'Invisibility', 'Rapidity', 'Pleasure',
     'Practicality', 'Hurting', 'Joy', 'Petulance', 'Intrusion', 'Chaos',
-    'Suffering', 'Extroversion', 'Frenzy', 'Solitude', 'Punctuality',
+    'Suffering', 'Extroversion', 'Frenzy', 'Sisu', # Added from JS
+    'Solitude', 'Punctuality',
     'Efficiency', 'Comfort', 'Patience', 'Internment', 'Incarceration',
     'Misapprehension', 'Loyalty', 'Envy', 'Acrimony', 'Worry', 'Fear',
     'Awe', 'Guile', 'Prurience', 'Fortune', 'Perspicacity', 'Domination',
@@ -158,7 +270,7 @@ ITEM_OFS = [ # Suffixes for special items ("of X")
     'Dignard', 'Ra', 'the Bone', 'Diamonique', 'Electrum', 'Hydragyrum',
 ]
 
-MONSTERS = [
+MONSTERS = [ # From JS config.js, formatted as (Name, Level, LootItem | * for generic)
     # (Name, Level, LootItem | * for generic)
     ("Anhkheg", 6, "chitin"), ("Ant", 0, "antenna"), ("Ape", 4, "ass"),
     ("Baluchitherium", 14, "ear"), ("Beholder", 10, "eyestalk"),
@@ -213,7 +325,7 @@ MONSTERS = [
     ("Dervish", 1, "robe"), ("Merman", 1, "trident"), ("Mermaid", 1, "gills"),
     ("Mimic", 9, "hinge"), ("Mind Flayer", 8, "tentacle"), ("Minotaur", 6, "map"),
     ("Yellow Mold", 1, "spore"), ("Morkoth", 7, "teeth"), ("Mummy", 6, "gauze"),
-    ("Naga", 9, "rattle"), ("Nebbish", 1, "belly"), ("Neo-Otyugh", 11, "organ "), # Trailing space in original
+    ("Naga", 9, "rattle"), ("Nebbish", 1, "belly"), ("Neo-Otyugh", 11, "organ "), # Trailing space in original JS
     ("Nixie", 1, "webbing"), ("Nymph", 3, "hanky"), ("Ochre Jelly", 6, "nucleus"),
     ("Octopus", 2, "beak"), ("Ogre", 4, "talon"), ("Ogre Mage", 5, "apparel"),
     ("Orc", 1, "snout"), ("Otyugh", 7, "organ"), ("Owlbear", 5, "feather"),
@@ -230,7 +342,7 @@ MONSTERS = [
     ("Sylph", 3, "thigh"), ("Titan", 20, "sandal"), ("Trapper", 12, "shag"),
     ("Treant", 10, "acorn"), ("Triton", 3, "scale"), ("Troglodyte", 2, "tail"),
     ("Troll", 6, "hide"), ("Umber Hulk", 8, "claw"), ("Unicorn", 4, "blood"),
-    ("Vampire", 8, "pancreas"), ("Wight", 4, "lung"), ("Will-o-the-Wisp", 9, "wisp"),
+    ("Vampire", 8, "pancreas"), ("Wight", 4, "lung"), ("Will-o'-the-Wisp", 9, "wisp"), # Corrected typo from original python
     ("Wraith", 5, "finger"), ("Wyvern", 7, "wing"), ("Xorn", 7, "jaw"),
     ("Yeti", 4, "fur"), ("Zombie", 2, "forehead"), ("Wasp", 0, "stinger"),
     ("Rat", 1, "tail"), ("Bunny", 0, "ear"), ("Moth", 0, "dust"),
@@ -239,28 +351,31 @@ MONSTERS = [
     ("Wolf", 2, "paw"), ("Whippet", 2, "collar"), ("Uruk", 2, "boot"),
     ("Poroid", 4, "node"), ("Moakum", 8, "frenum"), ("Fly", 0, "*"),
     ("Hogbird", 3, "curl"),
+    #("Wolog", 4, "lemma") # In JS, missing from original Python. Add it.
 ]
 
-MONSTER_MODS = [
-    # (LevelAdj, Pattern | * is placeholder)
-    # Note: Corrected "fœtal" to "foetal" for easier typing/compatibility
+MONSTER_MODS = [ # From JS K.MonMods, tuple (LevelAdj, Pattern | * is placeholder)
     (-4, 'foetal *'), (-4, 'dying *'), (-3, 'crippled *'), (-3, 'baby *'),
     (-2, 'adolescent *'), (-2, 'very sick *'), (-1, 'lesser *'), (-1, 'undernourished *'),
     (1, 'greater *'), (1, '* Elder'), (2, 'war *'), (2, 'Battle-*'),
     (3, 'Were-*'), (3, 'undead *'), (4, 'giant *'), (4, '* Rex'),
 ]
 
-EQUIPMENT_SLOTS = [
+EQUIPMENT_SLOTS = [ # Order from JS K.Equips
     "Weapon", "Shield", "Helm", "Hauberk", "Brassairts", "Vambraces",
     "Gauntlets", "Gambeson", "Cuisses", "Greaves", "Sollerets"
 ]
 
 TITLES = ['Mr.', 'Mrs.', 'Sir', 'Sgt.', 'Ms.', 'Captain', 'Chief', 'Admiral', 'Saint']
-IMPRESSIVE_TITLES = ['King', 'Queen', 'Lord', 'Lady', 'Viceroy', 'Mayor', 'Prince', 'Princess', 'Chief', 'Boss', 'Archbishop', 'Baron', 'Comptroller']
+IMPRESSIVE_TITLES = [ # From JS K.ImpressiveTitles
+    "King", "Queen", "Lord", "Lady", "Viceroy", "Mayor", "Prince",
+    "Princess", "Chief", "Boss", "Archbishop", "Chancellor", # Chancellor from JS
+    "Baroness", #"Inquistor" # Inquisitor missing from JS, maybe typo? Use JS list.
+]
 
-NAME_PARTS = [
-    # Consonants/clusters (start/mid) - adjusted '' frequency based on likely original intent
-    ['br', 'cr', 'dr', 'fr', 'gr', 'j', 'kr', 'l', 'm', 'n', 'pr', '', '', 'r', 'sh', 'tr', 'v', 'wh', 'x', 'y', 'z'],
+NAME_PARTS = [ # From JS KParts
+    # Consonants/clusters (start/mid) - adjusted '' frequency based on JS
+    ['br', 'cr', 'dr', 'fr', 'gr', 'j', 'kr', 'l', 'm', 'n', 'pr', '', '', '', 'r', 'sh', 'tr', 'v', 'wh', 'x', 'y', 'z'],
     # Vowels
     ['a', 'a', 'e', 'e', 'i', 'i', 'o', 'o', 'u', 'u', 'ae', 'ie', 'oo', 'ou'],
     # Consonants (end/mid)
@@ -269,9 +384,10 @@ NAME_PARTS = [
 
 # --- Constants ---
 BASE_ENCUMBRANCE = 10
-SAVE_FILE_EXT = ".pq"
+SAVE_FILE_EXT = ".pqw"
 BACKUP_FILE_EXT = ".bak"
-TIMER_INTERVAL_MS = 100 # How often the game logic timer fires
+TIMER_INTERVAL_MS = 33 # Match JS clock worker interval (20 fps)
+SAVEGAME_FOLDER = "savegame" # Define save folder name
 
 DARK_STYLESHEET = """
 QWidget {
@@ -308,7 +424,7 @@ QProgressBar {
     height: 14px; /* Make bars slightly shorter */
 }
 QProgressBar::chunk {
-    background-color: #5a9bcf; /* A blue progress color */
+    background-color: #507a15; /* Match JS bar color */
     /* Removed width and margin for default smooth look */
 }
 QStatusBar {
@@ -392,202 +508,221 @@ QSplitter::handle:horizontal {
 QSplitter::handle:vertical {
     height: 1px;
 }
+
+/* Add these menu-specific styles */
+QMenuBar {
+    background-color: #2b2b2b;
+    color: #f0f0f0;
+}
+
+QMenuBar::item:selected {
+    background-color: #3a3a3a;
+}
+
+QMenuBar::item:pressed {
+    background-color: #4a4a4a;
+}
+
+QMenu {
+    background-color: #2b2b2b;
+    border: 1px solid #3a3a3a;
+}
+
+QMenu::item {
+    padding: 5px 20px;
+}
+
+QMenu::item:selected {
+    background-color: #3a3a3a;
+}
+
+QMenu::item:pressed {
+    background-color: #4a4a4a;
+}
 """
 
 # ----------------------------------------------------------------------------
-# Helper Functions (Ported/Adapted from Delphi)
+# Helper Functions (Ported/Adapted from Delphi/JS)
 # ----------------------------------------------------------------------------
 
 def pick(items):
-    """Pick a random item from a list."""
+    """Pick a random item from a list using game RNG."""
     if not items:
         return None
-    return random.choice(items)
+    return items[Random(len(items))]
 
 def pick_low(items):
-    """Pick a random item, biased towards the lower end of the list."""
+    """Pick a random item, biased towards the lower end using game RNG."""
     if not items:
         return None
     count = len(items)
     if count == 0: return None
-    idx1 = random.randrange(count)
-    idx2 = random.randrange(count)
+    idx1 = Random(count)
+    idx2 = Random(count)
     return items[min(idx1, idx2)]
 
 def odds(chance, outof):
-    """Return True with a 'chance' out of 'outof' probability."""
+    """Return True with a 'chance' out of 'outof' probability using game RNG."""
     if outof <= 0: return False # Avoid division by zero or weirdness
-    return random.randint(1, outof) <= chance
+    return Random(outof) < chance
 
 def rand_sign():
-    """Return 1 or -1 randomly."""
-    return random.choice([1, -1])
+    """Return 1 or -1 randomly using game RNG."""
+    return Random(2) * 2 - 1 # Results in -1 or 1
 
 def ends(s, e):
     """Check if string s ends with string e."""
     return s.endswith(e)
 
 def plural(s):
-    """Basic English pluralization - improved version."""
+    """Pluralization logic based on JS version."""
     if not s: return ""
     s_lower = s.lower()
-    # Handle irregulars explicitly if needed (e.g., man -> men)
-    if s_lower == 'man': return s[:-3] + 'men' if s.isupper() else s[:-3] + 'Men' if s[0].isupper() else s[:-3] + 'men'
-    if s_lower == 'woman': return s[:-5] + 'women' if s.isupper() else s[:-5] + 'Women' if s[0].isupper() else s[:-5] + 'women'
-    if s_lower == 'goose': return s[:-4] + 'geese' if s.isupper() else s[:-4] + 'Geese' if s[0].isupper() else s[:-4] + 'geese'
-    if s_lower == 'mouse': return s[:-5] + 'mice' if s.isupper() else s[:-5] + 'Mice' if s[0].isupper() else s[:-5] + 'mice'
-    if s_lower == 'tooth': return s[:-5] + 'teeth' if s.isupper() else s[:-5] + 'Teeth' if s[0].isupper() else s[:-5] + 'teeth'
-    # Add more irregulars as found/needed
 
-    # General rules
-    if re.search('[sxz]$', s_lower) or re.search('[^aeioudgkprt]h$', s_lower):
-        return s + 'es'
-    elif re.search('[^aeiou]y$', s_lower):
+    # Handle specific cases from JS (man/Man)
+    if ends(s, 'Man') or ends(s, 'man'):
+        return s[:-2] + 'en'
+    # JS rules
+    elif ends(s_lower, 'y'):
         return s[:-1] + 'ies'
-    elif s_lower.endswith('f'):
+    elif ends(s_lower, 'us'):
+        return s[:-2] + 'i'
+    elif ends(s_lower, 'ch') or ends(s_lower, 'x') or ends(s_lower, 's') or ends(s_lower, 'sh'):
+        return s + 'es'
+    elif ends(s_lower, 'f'):
         return s[:-1] + 'ves'
-    elif s_lower.endswith('fe'):
-        return s[:-2] + 'ves'
-    elif s_lower.endswith('us') and len(s_lower) > 2: # Avoid 'bus' -> 'bi'
-         return s[:-2] + 'i'
     else:
         return s + 's'
 
 def indefinite_article(s):
-    """Return 'a' or 'an' based on the first letter of s."""
+    """Return 'a' or 'an' based on the first letter of s (JS logic)."""
     if not s: return ""
-    # Basic check - doesn't handle 'hour', 'unicorn', etc.
-    return 'an' if s[0].lower() in 'aeiou' else 'a'
+    # Basic check matching JS Pos(s[0], 'AEIOUaeiou') > 0
+    return 'an' if s[0].lower() in 'aeiouü' else 'a' # Include ü like JS
 
 def indefinite(s, qty):
     """Format a quantity and noun with indefinite article or pluralization."""
     if qty == 1:
         return f"{indefinite_article(s)} {s}"
     else:
-        # Handle cases like "1 gold piece" vs "2 gold pieces"
-        if s == "Gold Piece":
-            return f"{qty} {plural(s)}" if qty != 1 else f"{qty} {s}"
         return f"{qty} {plural(s)}"
 
 def definite(s, qty):
      """Format a quantity and noun with definite article and pluralization."""
-     # Handle cases like "the gold piece" vs "the gold pieces"
-     if s == "Gold Piece":
-          return f"the {plural(s) if qty != 1 else s}"
      return f"the {plural(s) if qty > 1 else s}"
 
 def int_to_roman(num):
-    """Convert an integer to Roman numeral string. Handles 1 to 39999."""
-    if not isinstance(num, int) or not 0 < num < 40000:
-        return str(num) # Fallback for out-of-range or non-integers
+    """Convert an integer to Roman numeral string (Handles up to 39999). Matches JS toRoman."""
+    if not isinstance(num, int): return "N" # Match JS null/NaN case
+    if num == 0: return "N"
+    if not 0 < abs(num) < 40000:
+        return str(num) # Fallback for out-of-range
 
-    val = [
-        10000, 9000, 5000, 4000, 1000, 900, 500, 400,
-        100, 90, 50, 40, 10, 9, 5, 4, 1
+    s = ""
+    n = num
+    if n < 0:
+        s = "-"
+        n = -n
+
+    roman_map = [
+        (10000, "T"), (9000, "MT"), (5000, "A"), (4000, "MA"), (1000, "M"),
+        (900, "CM"), (500, "D"), (400, "CD"), (100, "C"),
+        (90, "XC"), (50, "L"), (40, "XL"), (10, "X"),
+        (9, "IX"), (5, "V"), (4, "IV"), (1, "I")
     ]
-    syb = [
-        "T", "MT", "A", "MA", "M", "CM", "D", "CD",
-        "C", "XC", "L", "XL", "X", "IX", "V", "IV", "I"
-    ]
-    roman_num = ''
-    i = 0
-    while num > 0 and i < len(val):
-        for _ in range(num // val[i]):
-            roman_num += syb[i]
-            num -= val[i]
-        i += 1
-    return roman_num
+
+    for val, sym in roman_map:
+        while n >= val:
+            s += sym
+            n -= val
+
+    return s
 
 def roman_to_int(s):
-    """Convert a Roman numeral string (potentially with T, A, M) to an integer."""
-    if not isinstance(s, str) or not s: return 0
+    """Convert a Roman numeral string (potentially with T, A, M) to an integer. Matches JS toArabic."""
+    if not isinstance(s, str) or not s or s.upper() == 'N': return 0
+    original_s = s
     s = s.upper()
-    roman_map = {'I': 1, 'V': 5, 'X': 10, 'L': 50, 'C': 100, 'D': 500, 'M': 1000, 'A': 5000, 'T': 10000}
-    int_val = 0
-    i = 0
-    while i < len(s):
-        # Check for two-character subtractive combinations (MT, MA, CM, CD, XC, XL, IX, IV)
-        if i + 1 < len(s):
-            two_char = s[i:i+2]
-            v1 = roman_map.get(s[i], 0)
-            v2 = roman_map.get(s[i+1], 0)
+    n = 0
 
-            if v1 < v2: # Subtractive case
-                 # Check specifically for the valid subtractive pairs
-                 if two_char in ["MT", "MA", "CM", "CD", "XC", "XL", "IX", "IV"]:
-                     int_val += (v2 - v1)
-                     i += 2
-                     continue
-                 else: # Invalid subtractive pair (e.g., IM) - treat as error or ignore
-                     # For robustness, we'll just process the first character
-                     int_val += v1
-                     i += 1
-            else: # Additive case or same value
-                int_val += v1
-                i += 1
-        else: # Last character
-            int_val += roman_map.get(s[i], 0)
-            i += 1
-    # Fallback if it wasn't Roman
-    if int_val == 0 and s != '':
-        try: return int(s)
+    roman_map = [ # Order matters for parsing
+        ("MT", 9000), ("MA", 4000), ("CM", 900), ("CD", 400),
+        ("XC", 90), ("XL", 40), ("IX", 9), ("IV", 4),
+        ("T", 10000), ("A", 5000), ("M", 1000), ("D", 500),
+        ("C", 100), ("L", 50), ("X", 10), ("V", 5), ("I", 1)
+    ]
+
+    for sym, val in roman_map:
+        while s.startswith(sym):
+             n += val
+             s = s[len(sym):]
+
+    if s: # If characters remain after parsing Roman, it's not a valid Roman numeral
+        # Fallback: try converting original string to int
+        try: return int(original_s)
         except ValueError: return 0
-    return int_val
+    return n
 
 
 def generate_name():
-    """Generate a random fantasy-style name."""
+    """Generate a random fantasy-style name using game RNG, matching JS logic."""
     name = ""
-    syllables = random.randint(2, 4) # Control name length via syllables
-    for i in range(syllables):
-        # Simple structure: Consonant(s) + Vowel + Optional End Consonant
-        start_cons = pick(NAME_PARTS[0])
-        vowel = pick(NAME_PARTS[1])
-        end_cons = ""
-        # Add ending consonant less frequently, especially for shorter names or last syllable
-        if odds(1, 2) and (i < syllables -1 or odds(1,3)):
-            end_cons = pick(NAME_PARTS[2])
+    # JS version uses 6 parts, alternating KParts[0], KParts[1], KParts[2]
+    for i in range(6):
+        name += pick(NAME_PARTS[i % 3])
 
-        name += start_cons + vowel + end_cons
-
-    # Ensure it doesn't start/end awkwardly (e.g., with empty string parts)
-    name = re.sub(r'^[^a-zA-Z]+', '', name) # Remove leading non-alpha (if start_cons was '')
+    name = re.sub(r'^[^a-zA-Z]+', '', name) # Remove leading non-alpha
     name = re.sub(r'[^a-zA-Z]+$', '', name) # Remove trailing non-alpha
 
-    return name.capitalize() if name else "Adventurer" # Fallback
+    if not name: return "Adventurer" # Fallback
+
+    # Capitalize first letter only
+    return name[0].upper() + name[1:].lower()
 
 
-def calculate_xp_for_level(level):
-    """Calculate the total time (in milliseconds) needed to reach the *next* level."""
-    # Corresponds to LevelUpTime in Delphi (converted to ms)
+def calculate_level_up_time(level):
+    """Calculate the total time (in seconds) needed to reach the *next* level. Matches JS LevelUpTime."""
     if level <= 0: level = 1 # Ensure level is at least 1 for calculation
-    base_time_seconds = 20 * 60 # ~20 minutes base duration for level 1
+    # 20 minutes base duration for level 1, exponential increase
+    # Matches: Math.round((20 + Math.pow(1.15, level)) * 60)
     try:
-        # Using math.pow for potentially large exponents
-        level_factor = math.pow(1.15, level -1) # Adjust exponent base relative to level 1
+        # Use level for exponent directly (JS uses `level` which means for *next* level)
+        level_factor = math.pow(1.15, level)
     except OverflowError:
         level_factor = float('inf') # Handle very high levels
-    # Original seems exponential *duration*, not cumulative XP.
-    return round((20.0 + level_factor) * 60.0 * 1000.0) # Result in milliseconds
+
+    return round((20.0 + level_factor) * 60.0) # Result in seconds
+
 
 def rough_time(seconds_float):
-    """Convert seconds (float) into a human-readable duration string."""
+    """Convert seconds (float) into a human-readable duration string. Matches JS RoughTime."""
     if not isinstance(seconds_float, (int, float)) or seconds_float < 0:
         return "???"
     seconds = int(seconds_float)
     if seconds < 120:
         return f"{seconds} seconds"
-    elif seconds < 60 * 120:
+    elif seconds < 60 * 120: # 2 hours
         minutes = seconds // 60
-        secs = seconds % 60
-        return f"{minutes} min {secs} sec" if secs > 0 else f"{minutes} minutes"
-    elif seconds < 60 * 60 * 48:
+        return f"{minutes} minutes"
+    elif seconds < 60 * 60 * 48: # 2 days
         hours = seconds // 3600
-        minutes = (seconds % 3600) // 60
-        return f"{hours} hr {minutes} min" if minutes > 0 else f"{hours} hours"
-    else:
+        return f"{hours} hours"
+    elif seconds < 60 * 60 * 24 * 60: # 60 days (~2 months)
         days = seconds // (3600 * 24)
-        hours = (seconds % (3600 * 24)) // 3600
-        return f"{days} days {hours} hr" if hours > 0 else f"{days} days"
+        return f"{days} days"
+    elif seconds < 60 * 60 * 24 * 30 * 24: # ~2 years
+        months = seconds // (3600 * 24 * 30) # Approximate months
+        return f"{months} months"
+    else:
+        years = seconds // (3600 * 24 * 365) # Approximate years
+        return f"{years} years"
+
+def get_current_timestamp_iso():
+    """Returns the current timestamp in ISO 8601 format."""
+    return datetime.datetime.now(datetime.timezone.utc).isoformat()
+
+def get_current_timestamp_ms():
+    """Returns the current timestamp in milliseconds since epoch."""
+    return int(time.time() * 1000)
 
 # END OF FILE: config_data.py
