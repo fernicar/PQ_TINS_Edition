@@ -22,18 +22,19 @@ This version focuses on replicating the core single-player experience with a dar
 *   **Persistent State:** Game saves automatically on exit and loads the most recent save on startup.
     *   Uses the web version savegame format (`.pqw` files).
     *   Window position and size remembered using `QSettings`.
-*   **Dark Mode UI:** Built with PySide6, featuring a default dark theme for comfortable viewing during long progress sessions.
+*   **Customizable UI:** Built with PySide6, featuring:
+    *   Multiple style options (Fusion, Windows, Windows Vista, Windows 11)
+    *   Color scheme options (Auto/System, Light, Dark)
+    *   Comfortable viewing during long progress sessions
 *   **Offline Focus:** This version does *not* include the original's multiplayer features (server communication, bragging, realm selection).
 
 ## Screenshots
 
 **Main Window:**
-`[Screenshot showing the three main panels: Character, Equipment/Inventory, Plot/Quests, and the bottom status/task bars]`
-![app_capture0](https://github.com/fernicar/PQ_TINS_Edition/blob/main/images/app_capture0.png)
+![Screenshot showing the three main panels: Character, Equipment/Inventory, Plot/Quests, and the bottom status/task bars](https://github.com/fernicar/PQ_TINS_Edition/blob/main/images/app_capture1.png)
 
 **Character Creation:**
-`[Screenshot showing the character creation dialog with name, race/class selection, and stats]`
-![app_capture1](https://github.com/fernicar/PQ_TINS_Edition/blob/main/images/app_capture1.png)
+![Screenshot showing the character creation dialog with name, race/class selection, and stats](https://github.com/fernicar/PQ_TINS_Edition/blob/main/images/app_capture0.png)
 
 ## Getting Started
 
@@ -41,12 +42,13 @@ This version focuses on replicating the core single-player experience with a dar
 
 *   Python 3.8 or higher recommended.
 *   `pip` (Python package installer).
+*   PySide6 (Qt for Python).
 
 ### Installation & Running
 
 1.  **Clone or Download:**
     ```bash
-    git clone https://github.com/fernicar/PQ_TINS_Edition.git
+    git clone https://github.com/fernicar/PQ_TINS_Edition
     cd PQ_TINS_Edition
     ```
 
@@ -64,15 +66,22 @@ This version focuses on replicating the core single-player experience with a dar
 
 *   **Language:** Python 3
 *   **GUI Framework:** PySide6 (The official Qt for Python project)
-*   **Serialization:** `pickle` (for saving Python object state)
-*   **Compression:** `zlib` (for compressing save files)
 *   **Settings:** `QSettings` (for window geometry and last file path)
+*   **Styling:** QSS (Qt Style Sheets) for custom styling and theming
 
 ## File Structure
 
 *   `main.py`: The main application file, setting up the PySide6 UI (`MainWindow`), managing the game timer, handling saving/loading, and connecting the UI to the game logic.
+    * Contains the `MainWindow` class for the main game interface
+    * Implements `NewCharacterDialog` for character creation
+    * Includes `AboutDialog` for license and attribution information
+    * Manages UI updates, theme selection, and color schemes
 *   `game.py`: Core game logic including character creation, state management, save/load functionality, and game progression mechanics.
-*   `resources/`: Directory containing theme files (dark_theme.qss, default_theme.qss)
+    * Defines game constants (races, classes, monsters, items, etc.)
+    * Implements PRNG (Pseudo-Random Number Generator) for consistent random generation
+    * Handles character progression (leveling, quests, plot advancement)
+    * Manages inventory, equipment, and spell systems
+    * Provides save/load functionality with base64 encoding
 
 ## Saving and Loading
 
@@ -86,20 +95,37 @@ This version focuses on replicating the core single-player experience with a dar
 *   Save files use the `.pqw` format with the character's name (e.g., `CharacterName.pqw`)
 *   Window size and position are saved using `QSettings`
 
+## User Interface
+
+*   **Main Window:** Three-column layout with character information, inventory, and quest/plot panels
+*   **Menu System:**
+    *   **File Menu:** New Character, Load/Save Game, Exit
+    *   **View Menu:** Color Scheme (Auto/Light/Dark), Style (Fusion, Windows, etc.)
+    *   **Help Menu:** Visit Repository, About dialog
+*   **Progress Bars:** Visual indicators for Experience, Encumbrance, Plot, Quest, and current Task
+
 ## Technical Details
 
 *   **Python:** Port of the original web version (HTML/JavaScript) logic to Python
 *   **UI:** Built with PySide6, using QSS for styling and QSettings for window geometry
 *   **Game Loop:** Uses QTimer with 50ms interval (matches original clock.js)
 *   **Auto-Save:** Occurs every 60 seconds during gameplay
-*   **Theme System:** 
-    * Uses QSS stylesheets stored in `resources/` directory
-    * Default dark theme is automatically created if missing
+*   **Theme System:**
+    * Uses QT Styles like Fusion, Windows, Windows Vista, and Windows 11
+    * Default Fusion style for consistent cross-platform appearance
+    * Color scheme options: Auto (system default), Light, and Dark
+    * Style and color scheme can be changed via the View menu
 *   **Save Format:** Uses JSON format with base64 encoding
 *   **State Management:**
     * Maintains PRNG state for consistent random generation
     * Tracks character stats, inventory, spells, quests, and plot progression
     * Automatically calculates "best" stats/spells/equipment
+*   **Game Mechanics:**
+    * 21 playable races (Half Orc, Talking Pony, Enchanted Motorcycle, etc.)
+    * 18 character classes (Ur-Paladin, Robot Monk, Slow Poisoner, etc.)
+    * 47+ spells to learn and level up
+    * 11 equipment slots with procedurally generated items
+    * 180+ monster types with modifiers for difficulty scaling
 
 ## Contributing
 
@@ -114,7 +140,8 @@ This project is licensed under the MIT License - see the [LICENSE](https://githu
 *   Special thanks to ScuffedEpoch for the [TINS](https://github.com/ScuffedEpoch/TINS) methodology and the initial example.
 *   Thanks to Eric Fredricksen and the original [Progress Quest Web](https://bitbucket.org/grumdrig/pq-web) project contributors for the original game – you are a legend.
 *   Thanks to the PySide6 development team and community for their libraries and documentation.
-*   *(Your mention of AI assistants and VS Code extensions is fine here too if you wish to keep it)*
+*   **AI Assistance:**
     *   Thanks to the AI assistants used during development for their contributions.
     *   Augment extension for VS Code.
-    *   Tested LLM Gemini-1.5-pro from Google AI Studio.
+    *   Tested with Gemini-1.5-pro from Google AI Studio.
+    *   Claude 3.7 Sonnet from Anthropic.
