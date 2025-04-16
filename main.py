@@ -9,7 +9,7 @@ from PySide6.QtWidgets import (
     QLabel, QProgressBar, QTableWidget, QTableWidgetItem, QHeaderView,
     QPushButton, QDialog, QLineEdit, QRadioButton, QMessageBox, QListWidget,
     QListWidgetItem, QAbstractItemView, QSizePolicy, QSpacerItem, QMenuBar,
-    QMenu, QFileDialog, QTextEdit
+    QMenu, QFileDialog, QTextEdit, QStyleFactory
 )
 from PySide6.QtCore import Qt, QTimer, QSize, QUrl
 from PySide6.QtGui import QIcon, QPalette, QDesktopServices, QAction # For styling and icons
@@ -20,19 +20,17 @@ import game # Import the non-GUI logic
 TICK_INTERVAL_MS = 50  # Match clock.js interval
 SAVE_INTERVAL_SEC = 60 # Auto-save every minute
 REPOSITORY_URL = "https://github.com/fernicar/PQ_TINS_Edition"
-
-# Add warning comment
-THEME_WARNING = """/* WARNING: This file is automatically overwritten when selecting a theme.
-   Do not modify this file directly. Instead, create your own theme file
-   based on examples like dark_theme.qss or light_theme.qss */"""
+STYLE_THEMES = ['Windows', 'windowsvista', 'windows11', 'Fusion']
+STYLE_SELECTED_THEME = STYLE_THEMES[3]  # Fusion style by default
+COLOR_SCHEMES = ['Auto', 'Light', 'Dark']
+DEFAULT_COLOR_SCHEME = COLOR_SCHEMES[0]  # Auto by default
 
 # --- Helper Functions ---
 
 def find_most_recent_pqw_file():
     """Find the most recent .pqw file in the savegame directory."""
     save_files = list(game.SAVE_DIR.glob("*.pqw"))
-    if not save_files:
-        return None
+    if not save_files: return None
     # Sort by modification time, newest first
     save_files.sort(key=lambda x: x.stat().st_mtime, reverse=True)
     return save_files[0].name
@@ -58,12 +56,10 @@ class MainWindow(QMainWindow):
         self._create_menu_bar()
         self.update_ui() # Initial UI population
 
+        # Setup timer
         self.timer = QTimer(self)
         self.timer.timeout.connect(self._tick)
         self.timer.start(TICK_INTERVAL_MS)
-
-        # Get initial size for potential fixed size later
-        # self.setFixedSize(self.sizeHint()) # Optional: Fix window size like original
 
     def _create_menu_bar(self):
         """Create the menu bar with File, View, and Help menus."""
@@ -96,11 +92,36 @@ class MainWindow(QMainWindow):
 
         # View Menu
         view_menu = menu_bar.addMenu("&View")
-
-        # Select Theme action
-        select_theme_action = QAction("Select &Theme", self)
-        select_theme_action.triggered.connect(self._select_theme)
-        view_menu.addAction(select_theme_action)
+        
+        # Color Scheme submenu
+        color_scheme_menu = view_menu.addMenu("&Color Scheme")
+        
+        # Add color scheme options
+        self.color_scheme_actions = []
+        
+        for scheme_name in COLOR_SCHEMES:
+            action = QAction(scheme_name, self)
+            action.setCheckable(True)
+            action.setData(COLOR_SCHEMES.index(scheme_name))  # 0=Auto, 1=Light, 2=Dark
+            action.triggered.connect(lambda checked, a=action: self._on_color_scheme_selected(checked, a.data()))
+            color_scheme_menu.addAction(action)
+            self.color_scheme_actions.append(action)
+            # Set Auto as checked by default
+            if scheme_name == 'Auto':
+                action.setChecked(True)
+        
+        # Style submenu
+        style_menu = view_menu.addMenu("&Style")
+        
+        # Add style options
+        self.style_actions = []
+        
+        for style_name in STYLE_THEMES:
+            action = QAction(style_name, self)
+            action.setCheckable(True)
+            action.triggered.connect(lambda checked, s=style_name: self._on_style_changed(s))
+            style_menu.addAction(action)
+            self.style_actions.append(action)
 
         # Help Menu
         help_menu = menu_bar.addMenu("&Help")
@@ -119,8 +140,7 @@ class MainWindow(QMainWindow):
         """Show the New Character dialog."""
         dialog = NewCharacterDialog(self)
         if dialog.exec():
-            # Save current game before switching
-            game.save_game(self.game_state)
+            game.save_game(self.game_state) # Save current game before switching
 
             # Load the new character
             new_filename = f"{dialog.new_game_state['Traits']['Name']}.pqw"
@@ -129,24 +149,18 @@ class MainWindow(QMainWindow):
                 self.game_state = new_game_state
                 self.setWindowTitle(f"Progress Quest - {self.game_state['Traits']['Name']}")
                 self.update_ui()
-            else:
-                QMessageBox.critical(self, "Load Error", f"Failed to load new character: {new_filename}")
+            else: QMessageBox.critical(self, "Load Error", f"Failed to load new character: {new_filename}")
 
     def _load_game(self):
         """Show a file dialog to load a game."""
-        file_path, _ = QFileDialog.getOpenFileName(
-            self,
-            "Load Progress Quest Save File",
+        file_path, _ = QFileDialog.getOpenFileName(self, "Load Progress Quest Save File",
             str(game.SAVE_DIR),  # Start in the savegame directory
             "Progress Quest Save Files (*.pqw);;All Files (*.*)"
         )
 
         if file_path:
-            # Convert to Path object
-            file_path = Path(file_path)
-
-            # Check if the file exists
-            if not file_path.exists():
+            file_path = Path(file_path) # Convert to Path object
+            if not file_path.exists(): # Check if the file exists
                 QMessageBox.critical(self, "File Error", f"File not found: {file_path}")
                 return
 
@@ -157,17 +171,13 @@ class MainWindow(QMainWindow):
             if file_path.parent != game.SAVE_DIR:
                 try:
                     # Read the file content
-                    with open(file_path, 'r') as source_file:
-                        file_content = source_file.read()
+                    with open(file_path, 'r') as source_file: file_content = source_file.read()
 
                     # Save to the savegame directory
                     dest_path = game.SAVE_DIR / filename
-                    with open(dest_path, 'w') as dest_file:
-                        dest_file.write(file_content)
+                    with open(dest_path, 'w') as dest_file: dest_file.write(file_content)
 
-                    QMessageBox.information(
-                        self,
-                        "File Copied",
+                    QMessageBox.information( self, "File Copied",
                         f"File '{filename}' has been copied to the savegame directory."
                     )
                 except Exception as e:
@@ -183,15 +193,12 @@ class MainWindow(QMainWindow):
                 self.game_state = new_game_state
                 self.setWindowTitle(f"Progress Quest - {self.game_state['Traits']['Name']}")
                 self.update_ui()
-            else:
-                QMessageBox.critical(self, "Load Error", f"Failed to Load .pqw File: {filename}")
+            else: QMessageBox.critical(self, "Load Error", f"Failed to Load .pqw File: {filename}")
 
     def _save_game(self):
         """Save the current game state."""
-        if game.save_game(self.game_state):
-            QMessageBox.information(self, "Save .pqw File", "PQW File saved successfully.")
-        else:
-            QMessageBox.critical(self, "Save Error", "Failed to Save .pqw File.")
+        if game.save_game(self.game_state): QMessageBox.information(self, "Save .pqw File", "PQW File saved successfully.")
+        else: QMessageBox.critical(self, "Save Error", "Failed to Save .pqw File.")
 
     def _visit_repository(self):
         """Open the repository URL in the default browser."""
@@ -201,46 +208,6 @@ class MainWindow(QMainWindow):
         """Show the About dialog."""
         dialog = AboutDialog(self)
         dialog.exec()
-
-    def _select_theme(self):
-        """Show a file dialog to select a theme file."""
-        resources_dir = Path(__file__).parent / "resources"
-        file_path, _ = QFileDialog.getOpenFileName(
-            self,
-            "Select Theme File",
-            str(resources_dir),
-            "Theme Files (*.qss);;All Files (*.*)"
-        )
-
-        if file_path:
-            theme_path = Path(file_path)
-            if not theme_path.exists():
-                QMessageBox.critical(self, "Theme Error", f"Theme file not found: {theme_path}")
-                return
-
-            # Read the selected theme file
-            try:
-                with open(theme_path, 'r') as f:
-                    theme_content = f.read()
-
-                # Apply the theme
-                QApplication.instance().setStyleSheet(theme_content)
-
-                # Create default_theme.qss if it doesn't exist
-                default_theme_path = resources_dir / "default_theme.qss"
-
-                # Save as default theme
-                with open(default_theme_path, 'w') as f:
-                    f.write(THEME_WARNING + theme_content)
-
-                QMessageBox.information(
-                    self,
-                    "Theme Applied",
-                    f"Theme '{theme_path.name}' has been applied and set as default."
-                )
-
-            except Exception as e:
-                QMessageBox.critical(self, "Theme Error", f"Failed to apply theme: {e}")
 
     def _init_ui(self):
         central_widget = QWidget()
@@ -268,7 +235,7 @@ class MainWindow(QMainWindow):
         char_group = QGroupBox("Character Sheet")
         char_layout = QVBoxLayout(char_group)
         char_layout.setSpacing(2)  # Reduce spacing
-        char_layout.setContentsMargins(0, 10, 0, 0)  # Reduce margins
+        char_layout.setContentsMargins(0, 0, 0, 0)  # Reduce margins
         self.traits_table = QTableWidget(len(game.TRAITS), 2)
         self.traits_table.setHorizontalHeaderLabels(["Trait", "Value"])
         self.traits_table.verticalHeader().setVisible(False)
@@ -298,7 +265,7 @@ class MainWindow(QMainWindow):
         stats_group = QGroupBox("Stats") # No title needed if visually distinct
         stats_layout = QVBoxLayout(stats_group)
         stats_layout.setSpacing(2)  # Reduce spacing
-        stats_layout.setContentsMargins(0, 10, 0, 0)  # Reduce margins
+        stats_layout.setContentsMargins(0, 0, 0, 0)  # Reduce margins
         self.stats_table = QTableWidget(len(game.STATS), 2)
         self.stats_table.setHorizontalHeaderLabels(["Stat", "Value"])
         self.stats_table.verticalHeader().setVisible(False)
@@ -339,7 +306,7 @@ class MainWindow(QMainWindow):
         spell_group = QGroupBox("Spell Book")
         spell_layout = QVBoxLayout(spell_group)
         spell_layout.setSpacing(2)  # Reduce spacing
-        spell_layout.setContentsMargins(0, 10, 0, 0)  # Reduce margins
+        spell_layout.setContentsMargins(0, 0, 0, 0)  # Reduce margins
         self.spells_table = QTableWidget(0, 2) # Rows added dynamically
         self.spells_table.setHorizontalHeaderLabels(["Spell", "Level"])
         self.spells_table.verticalHeader().setVisible(False)
@@ -368,7 +335,7 @@ class MainWindow(QMainWindow):
         equip_group = QGroupBox("Equipment")
         equip_layout = QVBoxLayout(equip_group)
         equip_layout.setSpacing(2)  # Reduce spacing
-        equip_layout.setContentsMargins(0, 10, 0, 0)  # Reduce margins
+        equip_layout.setContentsMargins(0, 0, 0, 0)  # Reduce margins
         self.equips_table = QTableWidget(len(game.EQUIPS), 2)
         self.equips_table.setHorizontalHeaderLabels(["Slot", "Item"])
         self.equips_table.verticalHeader().setVisible(False)
@@ -399,7 +366,7 @@ class MainWindow(QMainWindow):
         inv_group = QGroupBox("Inventory")
         inv_layout = QVBoxLayout(inv_group)
         inv_layout.setSpacing(2)  # Reduce spacing
-        inv_layout.setContentsMargins(0, 10, 0, 0)  # Reduce margins
+        inv_layout.setContentsMargins(0, 0, 0, 0)  # Reduce margins
         self.inventory_table = QTableWidget(0, 2) # Dynamic rows
         self.inventory_table.setHorizontalHeaderLabels(["Item", "Qty"])
         self.inventory_table.verticalHeader().setVisible(False)
@@ -436,7 +403,7 @@ class MainWindow(QMainWindow):
         plot_group = QGroupBox("Plot Development")
         plot_layout = QVBoxLayout(plot_group)
         plot_layout.setSpacing(2)  # Reduce spacing
-        plot_layout.setContentsMargins(0, 10, 0, 0)  # Reduce margins
+        plot_layout.setContentsMargins(0, 0, 0, 0)  # Reduce margins
         self.plots_list = QListWidget() # Simpler than table for single column
         # Disable selection
         self.plots_list.setSelectionMode(QAbstractItemView.SelectionMode.NoSelection)
@@ -455,7 +422,7 @@ class MainWindow(QMainWindow):
         quest_group = QGroupBox("Quests")
         quest_layout = QVBoxLayout(quest_group)
         quest_layout.setSpacing(2)  # Reduce spacing
-        quest_layout.setContentsMargins(0, 10, 0, 0)  # Reduce margins
+        quest_layout.setContentsMargins(0, 0, 0, 0)  # Reduce margins
         self.quests_list = QListWidget()
         # Disable selection
         self.quests_list.setSelectionMode(QAbstractItemView.SelectionMode.NoSelection)
@@ -513,8 +480,7 @@ class MainWindow(QMainWindow):
         for i, trait_name in enumerate(game.TRAITS):
             value = game.get_trait(self.game_state, trait_name)
             item = self.traits_table.item(i, 1)
-            if item:
-                item.setText("  " + str(value))  # Add left indentation
+            if item: item.setText("  " + str(value))  # Add left indentation
             else:
                 item = QTableWidgetItem("  " + str(value))  # Add left indentation
                 self.traits_table.setItem(i, 1, item)
@@ -523,8 +489,7 @@ class MainWindow(QMainWindow):
         for i, stat_name in enumerate(game.STATS):
             value = game.get_stat(self.game_state, stat_name)
             item = self.stats_table.item(i, 1)
-            if item:
-                item.setText("  " + str(value))  # Add left indentation
+            if item: item.setText("  " + str(value))  # Add left indentation
             else:
                 item = QTableWidgetItem("  " + str(value))  # Add left indentation
                 self.stats_table.setItem(i, 1, item)
@@ -538,28 +503,21 @@ class MainWindow(QMainWindow):
             bar_widget.setValue(int(bar_data.get("position", 0))) # Use int for progress bar value
             bar_widget.setToolTip(bar_data.get("hint", ""))
             # Custom format for different bars
-            if bar_id == "Encum":
-                # Encumbrance bar shows current/max cubits
+            if bar_id == "Encum": # Encumbrance bar shows current/max cubits
                 bar_widget.setFormat(f"{int(bar_data.get('position', 0))}/{int(bar_data.get('max', 1))} cubits")
-            elif bar_id == "Quest":
-                # Quest bar shows percentage complete
+            elif bar_id == "Quest": # Quest bar shows percentage complete
                 bar_widget.setFormat(f"{bar_data.get('percent', 0)}% complete")
-            elif bar_id == "Exp":
-                # Experience bar shows hint text + percentage
+            elif bar_id == "Exp": # Experience bar shows hint text + percentage
                 hint = bar_data.get('hint', '')
-                if hint:
-                    # Extract the XP needed part from the hint
+                if hint: # Extract the XP needed part from the hint
                     xp_needed = hint.split(' XP needed')[0]
                     bar_widget.setFormat(f"{xp_needed} XP needed - {bar_data.get('percent', 0)}%")
-                else:
-                    bar_widget.setFormat(f"{bar_data.get('percent', 0)}%")
+                else: bar_widget.setFormat(f"{bar_data.get('percent', 0)}%")
             elif bar_id == "Plot":
                 # Plot bar shows hint text + percentage
                 hint = bar_data.get('hint', '')
-                if hint:
-                    bar_widget.setFormat(f"{hint} - {bar_data.get('percent', 0)}%")
-                else:
-                    bar_widget.setFormat(f"{bar_data.get('percent', 0)}%")
+                if hint: bar_widget.setFormat(f"{hint} - {bar_data.get('percent', 0)}%")
+                else: bar_widget.setFormat(f"{bar_data.get('percent', 0)}%")
             else: # Task uses percentage only
                 bar_widget.setFormat(f"{bar_data.get('percent', 0)}%")
 
@@ -584,8 +542,7 @@ class MainWindow(QMainWindow):
         for i, equip_slot in enumerate(game.EQUIPS):
             item_name = game.get_equip(self.game_state, equip_slot)
             item_widget = self.equips_table.item(i, 1)
-            if item_widget:
-                item_widget.setText("  " + item_name)  # Add left indentation
+            if item_widget: item_widget.setText("  " + item_name)  # Add left indentation
             else:
                 item = QTableWidgetItem("  " + item_name)  # Add left indentation
                 self.equips_table.setItem(i, 1, item)
@@ -601,7 +558,7 @@ class MainWindow(QMainWindow):
                 self.inventory_table.setItem(i, 0, item_name)
             if not item_qty:
                 item_qty = QTableWidgetItem()
-                item_qty.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)  # Right align with indentation
+                item_qty.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter) # Right align with indentation
                 self.inventory_table.setItem(i, 1, item_qty)
             item_name.setText("  " + name)  # Add left indentation
             item_qty.setText(str(qty) + "  ")  # Add right indentation
@@ -612,10 +569,8 @@ class MainWindow(QMainWindow):
 
         # Add all acts from Prologue (act 0) to current act (max 99 acts)
         for i in range(max(0, current_act-99), current_act + 1):
-            if i == 0:
-                act_str = "Prologue"
-            else:
-                # Convert act number to Roman numeral
+            if i == 0: act_str = "Prologue"
+            else: # Convert act number to Roman numeral
                 act_str = f"Act {game.to_roman(i)}"
 
             # Add icon based on status
@@ -683,6 +638,35 @@ class MainWindow(QMainWindow):
         # For now, just exit.
         QApplication.instance().quit()
 
+    def _on_color_scheme_selected(self, checked: bool, scheme_index: int):
+        """Handles color scheme selection."""
+        if not checked: return
+
+        # Apply the selected color scheme
+        app = QApplication.instance()
+        app.styleHints().setColorScheme(Qt.ColorScheme(scheme_index))
+
+        # Update actions
+        for action in self.color_scheme_actions:
+            action.setChecked(action.data() == scheme_index)
+
+    def _on_style_changed(self, style_name: str):
+        """Handles style selection."""
+        try:
+            # Apply the selected style
+            app = QApplication.instance()
+            app.setStyle(QStyleFactory.create(style_name))
+
+            # Update global style theme
+            global STYLE_SELECTED_THEME
+            STYLE_SELECTED_THEME = style_name
+
+            # Update actions
+            for action in self.style_actions:
+                action.setChecked(action.text() == style_name)
+
+        except Exception as e:
+            QMessageBox.critical(self, "Style Error", f"Error applying {style_name} style: {str(e)}")
 
 # --- About Dialog ---
 
@@ -799,7 +783,6 @@ class NewCharacterDialog(QDialog):
         self.classes_layout.addStretch(1)
         center_col_layout.addWidget(classes_group)
 
-
         # Stats Group
         stats_group = QGroupBox("Stats")
         stats_group_layout = QVBoxLayout(stats_group)
@@ -827,7 +810,6 @@ class NewCharacterDialog(QDialog):
         grid.addLayout(total_row)
         grid.addSpacerItem(QSpacerItem(20, 10, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding)) # Spacer
 
-
         # Roll Buttons
         roll_button_layout = QHBoxLayout()
         reroll_button = QPushButton("Roll")
@@ -841,10 +823,8 @@ class NewCharacterDialog(QDialog):
         roll_button_layout.addStretch(1)
         grid.addLayout(roll_button_layout)
 
-
         stats_group_layout.addLayout(grid)
         center_col_layout.addWidget(stats_group)
-
 
         # --- Bottom Buttons ---
         button_layout = QHBoxLayout()
@@ -872,13 +852,12 @@ class NewCharacterDialog(QDialog):
         self.stat_labels["Total"].setText(str(total))
 
         # Color coding based on total (approximate JS colors)
-        color = "white"
-        if total >= 75: color = "red"      # 63+18=81 -> lower a bit
-        elif total > 68: color = "yellow"  # 4*18=72 -> lower a bit
-        elif total <= 50: color = "grey"   # 63-18=45 -> higher a bit
-        elif total < 58: color = "silver"  # 3*18=54 -> higher a bit
+        color = "white"     # Default color for normal stat totals (58-68)
+        if total >= 75: color = "red" # Exceptional stats
+        elif total > 68: color = "yellow" # Above average stats
+        elif total <= 50: color = "grey" # Poor stats
+        elif total < 58: color = "silver" # Below average stats
         self.stat_labels["Total"].setStyleSheet(f"background-color: {color}; color: black; font-weight: bold;")
-
 
     def _reroll(self):
         if self.rolled_stats: # Don't store initial empty state
@@ -886,7 +865,6 @@ class NewCharacterDialog(QDialog):
         self.rolled_stats = game.roll_stats()
         self._update_stat_display()
         self.unroll_button.setEnabled(bool(self.stat_seed_history))
-
 
     def _unroll(self):
         if not self.stat_seed_history: return
@@ -898,8 +876,7 @@ class NewCharacterDialog(QDialog):
 
     def _get_selected_radio(self, radio_dict):
         for name, radio in radio_dict.items():
-            if radio.isChecked():
-                return name
+            if radio.isChecked(): return name
         return None
 
     def _accept(self):
@@ -922,95 +899,47 @@ class NewCharacterDialog(QDialog):
                                           f"A character named '{name}' already exists. Overwrite?",
                                           QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
                                           QMessageBox.StandardButton.No)
-             if reply == QMessageBox.StandardButton.No:
-                  return
-
+             if reply == QMessageBox.StandardButton.No: return
 
         self.new_game_state = game.create_new_character(name, race, klass, self.rolled_stats)
         # Save the newly created character immediately
         if game.save_game(self.new_game_state, save_filename):
             super().accept() # Close dialog if save successful
-        else:
-             QMessageBox.critical(self, "Save Error", f"Failed to save new character '{name}'.")
+        else: QMessageBox.critical(self, "Save Error", f"Failed to save new character '{name}'.")
 
 
 # --- Main Execution ---
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
-
-    # Apply theme stylesheet
-    resources_dir = Path(__file__).parent / "resources"
-    default_theme_path = resources_dir / "default_theme.qss"
-
-    # Check if default theme exists, if not create it from dark theme
-    if not default_theme_path.exists():
-        try:
-            dark_theme_path = resources_dir / "dark_theme.qss"
-            if dark_theme_path.exists():
-                with open(dark_theme_path, "r") as src_f:
-                    dark_theme_content = src_f.read()
-
-                with open(default_theme_path, "w") as dest_f:
-                    dest_f.write(THEME_WARNING + dark_theme_content)
-
-                print(f"Created default theme from dark theme.")
-        except Exception as e:
-            print(f"Error creating default theme: {e}")
-
-    # Apply the theme
-    try:
-        with open(default_theme_path, "r") as f:
-            app.setStyleSheet(f.read())
-
-        # Fix for Windows 10 dark mode title bar and enhance dark theme
-        dark_palette = QPalette()
-        # dark_palette.setColor(QPalette.ColorRole.Window, Qt.GlobalColor.darkGray)
-        dark_palette.setColor(QPalette.ColorRole.WindowText, Qt.GlobalColor.white)
-        # dark_palette.setColor(QPalette.ColorRole.Base, Qt.GlobalColor.darkGray)
-        # dark_palette.setColor(QPalette.ColorRole.AlternateBase, Qt.GlobalColor.darkGray)
-        # dark_palette.setColor(QPalette.ColorRole.ToolTipBase, Qt.GlobalColor.darkGray)
-        # dark_palette.setColor(QPalette.ColorRole.ToolTipText, Qt.GlobalColor.white)
-        # dark_palette.setColor(QPalette.ColorRole.Text, Qt.GlobalColor.white)
-        # dark_palette.setColor(QPalette.ColorRole.Button, Qt.GlobalColor.darkGray)
-        # dark_palette.setColor(QPalette.ColorRole.ButtonText, Qt.GlobalColor.white)
-        # dark_palette.setColor(QPalette.ColorRole.Link, Qt.GlobalColor.blue)
-        # dark_palette.setColor(QPalette.ColorRole.Highlight, Qt.GlobalColor.darkBlue)
-        # dark_palette.setColor(QPalette.ColorRole.HighlightedText, Qt.GlobalColor.white)
-        app.setPalette(dark_palette)
-    except FileNotFoundError:
-        print("Warning: No theme file found. Using default style.")
-    except Exception as e:
-        print(f"Error applying theme: {e}")
-
+    
+    # Force style for consistent look
+    app.setStyle(QStyleFactory.create(STYLE_SELECTED_THEME))
+    
+    # Set color scheme to Auto by default
+    app.styleHints().setColorScheme(Qt.ColorScheme.Unknown)  # Auto/Unknown = system default
+    
     # Try to find the most recent .pqw file
     recent_file = find_most_recent_pqw_file()
 
-    if recent_file:
-        # Load the most recent game
+    if recent_file: # Load the most recent game
         game_state = game.load_game(recent_file)
         if game_state:
             main_win = MainWindow(game_state)
             main_win.show()
-        else:
-            # If loading fails, show new character dialog
+        else: # If loading fails, show new character dialog
             dialog = NewCharacterDialog()
             if dialog.exec():
                 # Create and show main window with new character
                 main_win = MainWindow(dialog.new_game_state)
                 main_win.show()
-            else:
-                # User canceled, exit application
-                sys.exit(0)
-    else:
-        # No save files found, show new character dialog
+            else: sys.exit(0) # User canceled, exit application
+    else: # No save files found, show new character dialog
         dialog = NewCharacterDialog()
         if dialog.exec():
             # Create and show main window with new character
             main_win = MainWindow(dialog.new_game_state)
             main_win.show()
-        else:
-            # User canceled, exit application
-            sys.exit(0)
+        else: sys.exit(0) # User canceled, exit application
 
     sys.exit(app.exec())
